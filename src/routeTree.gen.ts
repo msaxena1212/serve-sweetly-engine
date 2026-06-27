@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TakeawayRouteImport } from './routes/takeaway'
+import { Route as ReportsRouteImport } from './routes/reports'
 import { Route as PosRouteImport } from './routes/pos'
 import { Route as MenuRouteImport } from './routes/menu'
 import { Route as KdsRouteImport } from './routes/kds'
@@ -19,6 +20,11 @@ import { Route as IndexRouteImport } from './routes/index'
 const TakeawayRoute = TakeawayRouteImport.update({
   id: '/takeaway',
   path: '/takeaway',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReportsRoute = ReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PosRoute = PosRouteImport.update({
@@ -53,6 +59,7 @@ export interface FileRoutesByFullPath {
   '/kds': typeof KdsRoute
   '/menu': typeof MenuRoute
   '/pos': typeof PosRoute
+  '/reports': typeof ReportsRoute
   '/takeaway': typeof TakeawayRoute
 }
 export interface FileRoutesByTo {
@@ -61,6 +68,7 @@ export interface FileRoutesByTo {
   '/kds': typeof KdsRoute
   '/menu': typeof MenuRoute
   '/pos': typeof PosRoute
+  '/reports': typeof ReportsRoute
   '/takeaway': typeof TakeawayRoute
 }
 export interface FileRoutesById {
@@ -70,14 +78,30 @@ export interface FileRoutesById {
   '/kds': typeof KdsRoute
   '/menu': typeof MenuRoute
   '/pos': typeof PosRoute
+  '/reports': typeof ReportsRoute
   '/takeaway': typeof TakeawayRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/inventory' | '/kds' | '/menu' | '/pos' | '/takeaway'
+  fullPaths:
+    | '/'
+    | '/inventory'
+    | '/kds'
+    | '/menu'
+    | '/pos'
+    | '/reports'
+    | '/takeaway'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/inventory' | '/kds' | '/menu' | '/pos' | '/takeaway'
-  id: '__root__' | '/' | '/inventory' | '/kds' | '/menu' | '/pos' | '/takeaway'
+  to: '/' | '/inventory' | '/kds' | '/menu' | '/pos' | '/reports' | '/takeaway'
+  id:
+    | '__root__'
+    | '/'
+    | '/inventory'
+    | '/kds'
+    | '/menu'
+    | '/pos'
+    | '/reports'
+    | '/takeaway'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -86,6 +110,7 @@ export interface RootRouteChildren {
   KdsRoute: typeof KdsRoute
   MenuRoute: typeof MenuRoute
   PosRoute: typeof PosRoute
+  ReportsRoute: typeof ReportsRoute
   TakeawayRoute: typeof TakeawayRoute
 }
 
@@ -96,6 +121,13 @@ declare module '@tanstack/react-router' {
       path: '/takeaway'
       fullPath: '/takeaway'
       preLoaderRoute: typeof TakeawayRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reports': {
+      id: '/reports'
+      path: '/reports'
+      fullPath: '/reports'
+      preLoaderRoute: typeof ReportsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/pos': {
@@ -142,6 +174,7 @@ const rootRouteChildren: RootRouteChildren = {
   KdsRoute: KdsRoute,
   MenuRoute: MenuRoute,
   PosRoute: PosRoute,
+  ReportsRoute: ReportsRoute,
   TakeawayRoute: TakeawayRoute,
 }
 export const routeTree = rootRouteImport
