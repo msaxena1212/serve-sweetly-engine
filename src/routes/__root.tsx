@@ -11,6 +11,9 @@ import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import { PosStoreProvider } from "@/lib/pos-store";
+import { AppSidebar } from "@/components/app-sidebar";
+import { Toaster } from "@/components/ui/sonner";
 
 function NotFoundComponent() {
   return (
@@ -77,11 +80,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
-      { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { title: "Forno POS — Restaurant Operations" },
+      { name: "description", content: "End-to-end Restaurant POS with dine-in, takeaway, kitchen display, menu, inventory and reports." },
+      { name: "author", content: "Forno" },
+      { property: "og:title", content: "Forno POS" },
+      { property: "og:description", content: "End-to-end Restaurant POS with dine-in, takeaway, KDS, inventory and reports." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
@@ -118,8 +121,15 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-      <Outlet />
+      <PosStoreProvider>
+        <div className="flex min-h-screen w-full bg-background text-foreground">
+          <AppSidebar />
+          <main className="flex-1 min-w-0 flex flex-col">
+            <Outlet />
+          </main>
+        </div>
+        <Toaster />
+      </PosStoreProvider>
     </QueryClientProvider>
   );
 }
