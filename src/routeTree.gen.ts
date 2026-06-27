@@ -9,8 +9,44 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TakeawayRouteImport } from './routes/takeaway'
+import { Route as ReportsRouteImport } from './routes/reports'
+import { Route as PosRouteImport } from './routes/pos'
+import { Route as MenuRouteImport } from './routes/menu'
+import { Route as KdsRouteImport } from './routes/kds'
+import { Route as InventoryRouteImport } from './routes/inventory'
 import { Route as IndexRouteImport } from './routes/index'
 
+const TakeawayRoute = TakeawayRouteImport.update({
+  id: '/takeaway',
+  path: '/takeaway',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReportsRoute = ReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PosRoute = PosRouteImport.update({
+  id: '/pos',
+  path: '/pos',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MenuRoute = MenuRouteImport.update({
+  id: '/menu',
+  path: '/menu',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const KdsRoute = KdsRouteImport.update({
+  id: '/kds',
+  path: '/kds',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InventoryRoute = InventoryRouteImport.update({
+  id: '/inventory',
+  path: '/inventory',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -19,28 +55,109 @@ const IndexRoute = IndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/inventory': typeof InventoryRoute
+  '/kds': typeof KdsRoute
+  '/menu': typeof MenuRoute
+  '/pos': typeof PosRoute
+  '/reports': typeof ReportsRoute
+  '/takeaway': typeof TakeawayRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/inventory': typeof InventoryRoute
+  '/kds': typeof KdsRoute
+  '/menu': typeof MenuRoute
+  '/pos': typeof PosRoute
+  '/reports': typeof ReportsRoute
+  '/takeaway': typeof TakeawayRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/inventory': typeof InventoryRoute
+  '/kds': typeof KdsRoute
+  '/menu': typeof MenuRoute
+  '/pos': typeof PosRoute
+  '/reports': typeof ReportsRoute
+  '/takeaway': typeof TakeawayRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/inventory'
+    | '/kds'
+    | '/menu'
+    | '/pos'
+    | '/reports'
+    | '/takeaway'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/' | '/inventory' | '/kds' | '/menu' | '/pos' | '/reports' | '/takeaway'
+  id:
+    | '__root__'
+    | '/'
+    | '/inventory'
+    | '/kds'
+    | '/menu'
+    | '/pos'
+    | '/reports'
+    | '/takeaway'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  InventoryRoute: typeof InventoryRoute
+  KdsRoute: typeof KdsRoute
+  MenuRoute: typeof MenuRoute
+  PosRoute: typeof PosRoute
+  ReportsRoute: typeof ReportsRoute
+  TakeawayRoute: typeof TakeawayRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/takeaway': {
+      id: '/takeaway'
+      path: '/takeaway'
+      fullPath: '/takeaway'
+      preLoaderRoute: typeof TakeawayRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reports': {
+      id: '/reports'
+      path: '/reports'
+      fullPath: '/reports'
+      preLoaderRoute: typeof ReportsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/pos': {
+      id: '/pos'
+      path: '/pos'
+      fullPath: '/pos'
+      preLoaderRoute: typeof PosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/menu': {
+      id: '/menu'
+      path: '/menu'
+      fullPath: '/menu'
+      preLoaderRoute: typeof MenuRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/kds': {
+      id: '/kds'
+      path: '/kds'
+      fullPath: '/kds'
+      preLoaderRoute: typeof KdsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/inventory': {
+      id: '/inventory'
+      path: '/inventory'
+      fullPath: '/inventory'
+      preLoaderRoute: typeof InventoryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -53,17 +170,13 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  InventoryRoute: InventoryRoute,
+  KdsRoute: KdsRoute,
+  MenuRoute: MenuRoute,
+  PosRoute: PosRoute,
+  ReportsRoute: ReportsRoute,
+  TakeawayRoute: TakeawayRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
