@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TakeawayRouteImport } from './routes/takeaway'
 import { Route as PosRouteImport } from './routes/pos'
+import { Route as MenuRouteImport } from './routes/menu'
 import { Route as KdsRouteImport } from './routes/kds'
 import { Route as IndexRouteImport } from './routes/index'
 
@@ -22,6 +23,11 @@ const TakeawayRoute = TakeawayRouteImport.update({
 const PosRoute = PosRouteImport.update({
   id: '/pos',
   path: '/pos',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MenuRoute = MenuRouteImport.update({
+  id: '/menu',
+  path: '/menu',
   getParentRoute: () => rootRouteImport,
 } as any)
 const KdsRoute = KdsRouteImport.update({
@@ -38,12 +44,14 @@ const IndexRoute = IndexRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/kds': typeof KdsRoute
+  '/menu': typeof MenuRoute
   '/pos': typeof PosRoute
   '/takeaway': typeof TakeawayRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/kds': typeof KdsRoute
+  '/menu': typeof MenuRoute
   '/pos': typeof PosRoute
   '/takeaway': typeof TakeawayRoute
 }
@@ -51,20 +59,22 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/kds': typeof KdsRoute
+  '/menu': typeof MenuRoute
   '/pos': typeof PosRoute
   '/takeaway': typeof TakeawayRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/kds' | '/pos' | '/takeaway'
+  fullPaths: '/' | '/kds' | '/menu' | '/pos' | '/takeaway'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/kds' | '/pos' | '/takeaway'
-  id: '__root__' | '/' | '/kds' | '/pos' | '/takeaway'
+  to: '/' | '/kds' | '/menu' | '/pos' | '/takeaway'
+  id: '__root__' | '/' | '/kds' | '/menu' | '/pos' | '/takeaway'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   KdsRoute: typeof KdsRoute
+  MenuRoute: typeof MenuRoute
   PosRoute: typeof PosRoute
   TakeawayRoute: typeof TakeawayRoute
 }
@@ -83,6 +93,13 @@ declare module '@tanstack/react-router' {
       path: '/pos'
       fullPath: '/pos'
       preLoaderRoute: typeof PosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/menu': {
+      id: '/menu'
+      path: '/menu'
+      fullPath: '/menu'
+      preLoaderRoute: typeof MenuRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/kds': {
@@ -105,6 +122,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   KdsRoute: KdsRoute,
+  MenuRoute: MenuRoute,
   PosRoute: PosRoute,
   TakeawayRoute: TakeawayRoute,
 }
