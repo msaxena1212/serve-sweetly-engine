@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TakeawayRouteImport } from './routes/takeaway'
 import { Route as PosRouteImport } from './routes/pos'
+import { Route as KdsRouteImport } from './routes/kds'
 import { Route as IndexRouteImport } from './routes/index'
 
 const TakeawayRoute = TakeawayRouteImport.update({
@@ -23,6 +24,11 @@ const PosRoute = PosRouteImport.update({
   path: '/pos',
   getParentRoute: () => rootRouteImport,
 } as any)
+const KdsRoute = KdsRouteImport.update({
+  id: '/kds',
+  path: '/kds',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -31,30 +37,34 @@ const IndexRoute = IndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/kds': typeof KdsRoute
   '/pos': typeof PosRoute
   '/takeaway': typeof TakeawayRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/kds': typeof KdsRoute
   '/pos': typeof PosRoute
   '/takeaway': typeof TakeawayRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/kds': typeof KdsRoute
   '/pos': typeof PosRoute
   '/takeaway': typeof TakeawayRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/pos' | '/takeaway'
+  fullPaths: '/' | '/kds' | '/pos' | '/takeaway'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/pos' | '/takeaway'
-  id: '__root__' | '/' | '/pos' | '/takeaway'
+  to: '/' | '/kds' | '/pos' | '/takeaway'
+  id: '__root__' | '/' | '/kds' | '/pos' | '/takeaway'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  KdsRoute: typeof KdsRoute
   PosRoute: typeof PosRoute
   TakeawayRoute: typeof TakeawayRoute
 }
@@ -75,6 +85,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PosRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/kds': {
+      id: '/kds'
+      path: '/kds'
+      fullPath: '/kds'
+      preLoaderRoute: typeof KdsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -87,6 +104,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  KdsRoute: KdsRoute,
   PosRoute: PosRoute,
   TakeawayRoute: TakeawayRoute,
 }
