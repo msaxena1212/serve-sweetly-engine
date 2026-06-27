@@ -2,7 +2,7 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import { LayoutDashboard, Utensils, ShoppingBag, ChefHat, BookOpen, Boxes, BarChart3 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const items = [
+const items: { to: string; label: string; icon: typeof LayoutDashboard; exact?: boolean }[] = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, exact: true },
   { to: "/pos", label: "Dine-In POS", icon: Utensils },
   { to: "/takeaway", label: "Takeaway", icon: ShoppingBag },
@@ -10,7 +10,7 @@ const items = [
   { to: "/menu", label: "Menu", icon: BookOpen },
   { to: "/inventory", label: "Inventory", icon: Boxes },
   { to: "/reports", label: "Reports", icon: BarChart3 },
-] as const;
+];
 
 export function AppSidebar() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
@@ -30,9 +30,9 @@ export function AppSidebar() {
           const active = it.exact ? pathname === it.to : pathname.startsWith(it.to);
           const Icon = it.icon;
           return (
-            <Link
+          <Link
               key={it.to}
-              to={it.to}
+              to={it.to as "/"}
               className={cn(
                 "flex items-center gap-3 px-3 py-2 rounded-md transition-colors",
                 active
