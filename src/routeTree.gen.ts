@@ -13,6 +13,8 @@ import { Route as TakeawayRouteImport } from './routes/takeaway'
 import { Route as ReportsRouteImport } from './routes/reports'
 import { Route as PosRouteImport } from './routes/pos'
 import { Route as MenuRouteImport } from './routes/menu'
+import { Route as MastersRouteImport } from './routes/masters'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as KdsRouteImport } from './routes/kds'
 import { Route as InventoryRouteImport } from './routes/inventory'
 import { Route as IndexRouteImport } from './routes/index'
@@ -37,6 +39,16 @@ const MenuRoute = MenuRouteImport.update({
   path: '/menu',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MastersRoute = MastersRouteImport.update({
+  id: '/masters',
+  path: '/masters',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const KdsRoute = KdsRouteImport.update({
   id: '/kds',
   path: '/kds',
@@ -57,6 +69,8 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/inventory': typeof InventoryRoute
   '/kds': typeof KdsRoute
+  '/login': typeof LoginRoute
+  '/masters': typeof MastersRoute
   '/menu': typeof MenuRoute
   '/pos': typeof PosRoute
   '/reports': typeof ReportsRoute
@@ -66,6 +80,8 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/inventory': typeof InventoryRoute
   '/kds': typeof KdsRoute
+  '/login': typeof LoginRoute
+  '/masters': typeof MastersRoute
   '/menu': typeof MenuRoute
   '/pos': typeof PosRoute
   '/reports': typeof ReportsRoute
@@ -76,6 +92,8 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/inventory': typeof InventoryRoute
   '/kds': typeof KdsRoute
+  '/login': typeof LoginRoute
+  '/masters': typeof MastersRoute
   '/menu': typeof MenuRoute
   '/pos': typeof PosRoute
   '/reports': typeof ReportsRoute
@@ -87,17 +105,30 @@ export interface FileRouteTypes {
     | '/'
     | '/inventory'
     | '/kds'
+    | '/login'
+    | '/masters'
     | '/menu'
     | '/pos'
     | '/reports'
     | '/takeaway'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/inventory' | '/kds' | '/menu' | '/pos' | '/reports' | '/takeaway'
+  to:
+    | '/'
+    | '/inventory'
+    | '/kds'
+    | '/login'
+    | '/masters'
+    | '/menu'
+    | '/pos'
+    | '/reports'
+    | '/takeaway'
   id:
     | '__root__'
     | '/'
     | '/inventory'
     | '/kds'
+    | '/login'
+    | '/masters'
     | '/menu'
     | '/pos'
     | '/reports'
@@ -108,6 +139,8 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   InventoryRoute: typeof InventoryRoute
   KdsRoute: typeof KdsRoute
+  LoginRoute: typeof LoginRoute
+  MastersRoute: typeof MastersRoute
   MenuRoute: typeof MenuRoute
   PosRoute: typeof PosRoute
   ReportsRoute: typeof ReportsRoute
@@ -144,6 +177,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MenuRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/masters': {
+      id: '/masters'
+      path: '/masters'
+      fullPath: '/masters'
+      preLoaderRoute: typeof MastersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/kds': {
       id: '/kds'
       path: '/kds'
@@ -172,6 +219,8 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   InventoryRoute: InventoryRoute,
   KdsRoute: KdsRoute,
+  LoginRoute: LoginRoute,
+  MastersRoute: MastersRoute,
   MenuRoute: MenuRoute,
   PosRoute: PosRoute,
   ReportsRoute: ReportsRoute,
@@ -180,3 +229,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}

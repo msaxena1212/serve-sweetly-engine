@@ -12,6 +12,7 @@ import { useEffect, type ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { PosStoreProvider } from "@/lib/pos-store";
+import { ConfigStoreProvider } from "@/lib/config-store";
 import { AppSidebar } from "@/components/app-sidebar";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -75,7 +76,18 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   );
 }
 
-export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
+import { getSessionFn, type UserSession } from '../lib/auth-rpc';
+
+export const Route = createRootRouteWithContext<{ queryClient: QueryClient; session: UserSession | null }>()({
+  beforeLoad: async () => {
+    try {
+      const session = await getSessionFn();
+      return { session };
+    } catch {
+      // Database or network error — treat as unauthenticated
+      return { session: null };
+    }
+  },
   head: () => ({
     meta: [
       { charSet: "utf-8" },
@@ -117,19 +129,23 @@ function RootShell({ children }: { children: ReactNode }) {
 }
 
 function RootComponent() {
-  const { queryClient } = Route.useRouteContext();
+  const { queryClient, session } = Route.useRouteContext();
+  const router = useRouter();
+  const isLoginPage = router.state.location.pathname === '/login';
 
   return (
     <QueryClientProvider client={queryClient}>
-      <PosStoreProvider>
-        <div className="flex min-h-screen w-full bg-background text-foreground">
-          <AppSidebar />
-          <main className="flex-1 min-w-0 flex flex-col">
-            <Outlet />
-          </main>
-        </div>
-        <Toaster />
-      </PosStoreProvider>
+      <ConfigStoreProvider>
+        <PosStoreProvider>
+          <div className="flex min-h-screen w-full bg-background text-foreground">
+            {!isLoginPage && session && <AppSidebar />}
+            <main className="flex-1 min-w-0 flex flex-col">
+              <Outlet />
+            </main>
+          </div>
+          <Toaster />
+        </PosStoreProvider>
+      </ConfigStoreProvider>
     </QueryClientProvider>
   );
 }

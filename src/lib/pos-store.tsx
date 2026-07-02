@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useReducer, type ReactNode } from "react";
 
-export type MenuCategory = "Starters" | "Mains" | "Sides" | "Desserts" | "Beverages";
-export type Station = "Kitchen" | "Bar" | "Tandoor";
+export type MenuCategory = string;
+export type Station = string;
 
 export interface MenuItem {
   id: string;
@@ -36,7 +36,7 @@ export interface Order {
   status: OrderStatus;
   createdAt: number;
   closedAt?: number;
-  paymentMethod?: "cash" | "card" | "upi";
+  paymentMethod?: string;
   discountPct: number;
   taxPct: number;
 }
@@ -74,9 +74,27 @@ const seedMenu: MenuItem[] = [
 ];
 
 const seedTables: Table[] = [
-  ...Array.from({ length: 8 }, (_, i) => ({ id: `t${i + 1}`, name: `T${i + 1}`, seats: i % 2 ? 4 : 2, section: "Main" as const })),
-  ...Array.from({ length: 4 }, (_, i) => ({ id: `p${i + 1}`, name: `P${i + 1}`, seats: 4, section: "Patio" as const })),
-  ...Array.from({ length: 3 }, (_, i) => ({ id: `b${i + 1}`, name: `B${i + 1}`, seats: 2, section: "Bar" as const })),
+  // Main floor — 16 tables (T1–T16)
+  ...Array.from({ length: 16 }, (_, i) => ({
+    id: `t${i + 1}`,
+    name: `T${i + 1}`,
+    seats: i % 3 === 0 ? 6 : i % 2 === 0 ? 4 : 2,
+    section: "Main" as const,
+  })),
+  // Patio — 8 tables (P1–P8)
+  ...Array.from({ length: 8 }, (_, i) => ({
+    id: `p${i + 1}`,
+    name: `P${i + 1}`,
+    seats: i < 4 ? 4 : 6,
+    section: "Patio" as const,
+  })),
+  // Bar — 6 seats/stools (B1–B6)
+  ...Array.from({ length: 6 }, (_, i) => ({
+    id: `b${i + 1}`,
+    name: `B${i + 1}`,
+    seats: 2,
+    section: "Bar" as const,
+  })),
 ];
 
 const initialState: State = { menu: seedMenu, tables: seedTables, orders: [] };
@@ -89,11 +107,17 @@ type Action =
   | { type: "REMOVE_ITEM"; orderId: string; itemId: string }
   | { type: "SEND_KOT"; orderId: string }
   | { type: "ADVANCE_ITEM"; orderId: string; itemId: string }
-  | { type: "PAY"; orderId: string; method: "cash" | "card" | "upi"; discountPct: number }
+  | { type: "PAY"; orderId: string; method: string; discountPct: number }
   | { type: "VOID_ORDER"; orderId: string }
   | { type: "UPSERT_MENU"; item: MenuItem }
   | { type: "DELETE_MENU"; id: string }
   | { type: "ADJUST_STOCK"; id: string; delta: number }
+  | { type: "UPDATE_NOTES"; orderId: string; itemId: string; notes: string }
+  | { type: "TRANSFER_TABLE"; orderId: string; newTableId: string }
+  | { type: "MERGE_TABLES"; sourceOrderId: string; targetOrderId: string }
+  | { type: "ADD_TABLE"; table: Table }
+  | { type: "UPDATE_TABLE"; table: Table }
+  | { type: "DELETE_TABLE"; id: string }
   | { type: "RESET" };
 
 function reducer(state: State, action: Action): State {
@@ -107,7 +131,7 @@ function reducer(state: State, action: Action): State {
         ...state,
         orders: state.orders.map((o) => {
           if (o.id !== action.orderId) return o;
-          const existing = o.items.find((i) => i.menuItemId === action.item.menuItemId && i.status === "new");
+          const existing = o.items.find((i) => i.menuItemId === action.item.menuItemId && i.status === "new" && i.notes === action.item.notes);
           if (existing) {
             return { ...o, items: o.items.map((i) => (i.id === existing.id ? { ...i, qty: i.qty + action.item.qty } : i)) };
           }
@@ -120,6 +144,15 @@ function reducer(state: State, action: Action): State {
         orders: state.orders.map((o) =>
           o.id === action.orderId
             ? { ...o, items: o.items.map((i) => (i.id === action.itemId ? { ...i, qty: Math.max(1, action.qty) } : i)) }
+            : o,
+        ),
+      };
+    case "UPDATE_NOTES":
+      return {
+        ...state,
+        orders: state.orders.map((o) =>
+          o.id === action.orderId
+            ? { ...o, items: o.items.map((i) => (i.id === action.itemId ? { ...i, notes: action.notes } : i)) }
             : o,
         ),
       };
@@ -173,6 +206,33 @@ function reducer(state: State, action: Action): State {
       };
     case "VOID_ORDER":
       return { ...state, orders: state.orders.map((o) => (o.id === action.orderId ? { ...o, status: "void", closedAt: Date.now() } : o)) };
+    case "TRANSFER_TABLE":
+      return {
+        ...state,
+        orders: state.orders.map((o) => (o.id === action.orderId ? { ...o, tableId: action.newTableId } : o)),
+      };
+    case "MERGE_TABLES": {
+      const source = state.orders.find((o) => o.id === action.sourceOrderId);
+      if (!source) return state;
+      return {
+        ...state,
+        orders: state.orders.map((o) => {
+          if (o.id === action.targetOrderId) {
+            return { ...o, items: [...o.items, ...source.items] };
+          }
+          if (o.id === action.sourceOrderId) {
+            return { ...o, status: "void", closedAt: Date.now() };
+          }
+          return o;
+        }),
+      };
+    }
+    case "ADD_TABLE":
+      return { ...state, tables: [...state.tables, action.table] };
+    case "UPDATE_TABLE":
+      return { ...state, tables: state.tables.map((t) => (t.id === action.table.id ? action.table : t)) };
+    case "DELETE_TABLE":
+      return { ...state, tables: state.tables.filter((t) => t.id !== action.id) };
     case "UPSERT_MENU":
       return state.menu.find((m) => m.id === action.item.id)
         ? { ...state, menu: state.menu.map((m) => (m.id === action.item.id ? action.item : m)) }
@@ -197,13 +257,30 @@ interface Ctx extends State {
 
 const StoreContext = createContext<Ctx | null>(null);
 
+import { getMenuFn, getTablesFn } from './api';
+import { useConfig } from './config-store';
+
 export function PosStoreProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState);
+  const { config } = useConfig();
 
   useEffect(() => {
     try {
       const raw = typeof window !== "undefined" ? window.localStorage.getItem(STORAGE_KEY) : null;
       if (raw) dispatch({ type: "HYDRATE", payload: JSON.parse(raw) as State });
+      
+      // Fetch fresh data from DB to override local storage menu/tables
+      Promise.all([getMenuFn(), getTablesFn()]).then(([dbMenu, dbTables]) => {
+        dispatch({ 
+          type: "HYDRATE", 
+          payload: {
+            ...JSON.parse(raw || '{"orders": []}'),
+            orders: raw ? JSON.parse(raw).orders : [],
+            menu: dbMenu as any,
+            tables: dbTables as any
+          }
+        });
+      });
     } catch {}
   }, []);
 
@@ -214,9 +291,10 @@ export function PosStoreProvider({ children }: { children: ReactNode }) {
   }, [state]);
 
   const value = useMemo<Ctx>(() => {
-    const openOrderForTable = (tableId: string) => {
+    const openOrderForTable = async (tableId: string) => {
       const existing = state.orders.find((o) => o.type === "dine-in" && o.tableId === tableId && o.status === "open");
       if (existing) return existing;
+      
       const order: Order = {
         id: `o-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         type: "dine-in",
@@ -224,13 +302,22 @@ export function PosStoreProvider({ children }: { children: ReactNode }) {
         items: [],
         status: "open",
         createdAt: Date.now(),
-        discountPct: 0,
-        taxPct: 8,
+        discountPct: config.billing.defaultDiscountPct,
+        taxPct: config.billing.defaultTaxPct,
       };
       dispatch({ type: "CREATE_ORDER", payload: order });
+      
+      // Sync to DB
+      try {
+        const { createOrderFn } = await import('./api');
+        const res = await createOrderFn({ data: { type: 'dine-in', tableId } });
+        order.id = res.id; // Update with DB ID
+      } catch (err) {
+        console.error('Failed to save order to DB', err);
+      }
       return order;
     };
-    const openTakeawayOrder = (customerName: string) => {
+    const openTakeawayOrder = async (customerName: string) => {
       const order: Order = {
         id: `o-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         type: "takeaway",
@@ -238,10 +325,16 @@ export function PosStoreProvider({ children }: { children: ReactNode }) {
         items: [],
         status: "open",
         createdAt: Date.now(),
-        discountPct: 0,
-        taxPct: 8,
+        discountPct: config.billing.defaultDiscountPct,
+        taxPct: config.billing.defaultTaxPct,
       };
       dispatch({ type: "CREATE_ORDER", payload: order });
+
+      try {
+        const { createOrderFn } = await import('./api');
+        const res = await createOrderFn({ data: { type: 'takeaway', customerName } });
+        order.id = res.id;
+      } catch (err) {}
       return order;
     };
     const getOrderTotals = (order: Order) => {
@@ -252,7 +345,7 @@ export function PosStoreProvider({ children }: { children: ReactNode }) {
       return { subtotal, discount, tax, total };
     };
     return { ...state, dispatch, openOrderForTable, openTakeawayOrder, getOrderTotals };
-  }, [state]);
+  }, [state, config.billing]);
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }
@@ -263,7 +356,7 @@ export function usePos() {
   return ctx;
 }
 
-export function newOrderItem(menuItem: MenuItem, qty = 1): OrderItem {
+export function newOrderItem(menuItem: MenuItem, qty = 1, notes?: string): OrderItem {
   return {
     id: `i-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     menuItemId: menuItem.id,
@@ -272,9 +365,10 @@ export function newOrderItem(menuItem: MenuItem, qty = 1): OrderItem {
     qty,
     station: menuItem.station,
     status: "new",
+    notes,
   };
 }
 
 export function fmtMoney(n: number) {
-  return `$${n.toFixed(2)}`;
+  return `₹${n.toFixed(2)}`;
 }

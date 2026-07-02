@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useState } from "react";
 import { usePos, fmtMoney, type MenuItem, type MenuCategory, type Station } from "@/lib/pos-store";
 import { Card } from "@/components/ui/card";
@@ -7,23 +7,50 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Trash2, Plus } from "lucide-react";
+import { addMenuItemFn, deleteMenuItemFn } from "@/lib/api";
+import { useConfig } from "@/lib/config-store";
 
 export const Route = createFileRoute("/menu")({
+  beforeLoad: ({ context }) => {
+    if (!context.session) {
+      throw redirect({ to: '/login' });
+    }
+  },
   head: () => ({ meta: [{ title: "Menu — Forno" }, { name: "description", content: "Manage menu items, prices and availability." }] }),
   component: MenuPage,
 });
 
-const cats: MenuCategory[] = ["Starters", "Mains", "Sides", "Desserts", "Beverages"];
-const stations: Station[] = ["Kitchen", "Tandoor", "Bar"];
-
 function MenuPage() {
   const { menu, dispatch } = usePos();
-  const [draft, setDraft] = useState<MenuItem>({ id: "", name: "", price: 0, category: "Mains", station: "Kitchen", available: true, stock: 0 });
+  const { config } = useConfig();
+  const cats = config.categories.filter(c => c.active).map(c => c.name);
+  const stations = config.stations.filter(s => s.active).map(s => s.name);
+  
+  const [draft, setDraft] = useState<MenuItem>({ 
+    id: "", name: "", price: 0, 
+    category: cats[0] || "Mains", 
+    station: stations[0] || "Kitchen", 
+    available: true, stock: 0 
+  });
 
-  const addItem = () => {
+  const addItem = async () => {
     if (!draft.name.trim() || draft.price <= 0) return;
-    dispatch({ type: "UPSERT_MENU", item: { ...draft, id: `m-${Date.now()}` } });
-    setDraft({ id: "", name: "", price: 0, category: "Mains", station: "Kitchen", available: true, stock: 0 });
+    try {
+      const res = await addMenuItemFn({ data: { name: draft.name, price: draft.price, category: draft.category, available: draft.available } });
+      dispatch({ type: "UPSERT_MENU", item: { ...draft, id: res.id } });
+      setDraft({ id: "", name: "", price: 0, category: "Mains", station: "Kitchen", available: true, stock: 0 });
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const deleteItem = async (id: string) => {
+    try {
+      await deleteMenuItemFn({ data: { id } });
+      dispatch({ type: "DELETE_MENU", id });
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   return (
@@ -38,11 +65,11 @@ function MenuPage() {
         <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
           <Input placeholder="Name" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} className="md:col-span-2" />
           <Input type="number" placeholder="Price" value={draft.price || ""} onChange={(e) => setDraft({ ...draft, price: Number(e.target.value) })} />
-          <Select value={draft.category} onValueChange={(v) => setDraft({ ...draft, category: v as MenuCategory })}>
+          <Select value={draft.category} onValueChange={(v) => setDraft({ ...draft, category: v })}>
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>{cats.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
           </Select>
-          <Select value={draft.station} onValueChange={(v) => setDraft({ ...draft, station: v as Station })}>
+          <Select value={draft.station} onValueChange={(v) => setDraft({ ...draft, station: v })}>
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>{stations.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
           </Select>
@@ -75,7 +102,7 @@ function MenuPage() {
                   <Switch checked={m.available} onCheckedChange={(v) => dispatch({ type: "UPSERT_MENU", item: { ...m, available: v } })} />
                 </td>
                 <td className="px-2 py-2 text-right">
-                  <Button size="icon" variant="ghost" onClick={() => dispatch({ type: "DELETE_MENU", id: m.id })}><Trash2 /></Button>
+                  <Button size="icon" variant="ghost" onClick={() => deleteItem(m.id)}><Trash2 /></Button>
                 </td>
               </tr>
             ))}

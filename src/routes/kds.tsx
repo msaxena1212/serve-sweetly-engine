@@ -1,11 +1,19 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { usePos, type Station } from "@/lib/pos-store";
+import { createFileRoute, redirect } from "@tanstack/react-router";
+import { type Station } from "@/lib/pos-store";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { getActiveOrdersFn, getTablesFn, updateOrderItemStatusFn } from "@/lib/api";
+import { useConfig } from "@/lib/config-store";
 
 export const Route = createFileRoute("/kds")({
+  beforeLoad: ({ context }) => {
+    if (!context.session) {
+      throw redirect({ to: '/login' });
+    }
+  },
   head: () => ({
     meta: [
       { title: "Kitchen Display — Forno" },
@@ -18,8 +26,39 @@ export const Route = createFileRoute("/kds")({
 const stations: ("All" | Station)[] = ["All", "Kitchen", "Tandoor", "Bar"];
 
 function KdsPage() {
-  const { orders, tables, dispatch } = usePos();
   const [station, setStation] = useState<(typeof stations)[number]>("All");
+  const queryClient = useQueryClient();
+  const { config } = useConfig();
+  const { slaWarningMin, slaCriticalMin, refreshIntervalSec } = config.kds;
+
+  // Derive active stations from config + always add "All"
+  const activeStations: string[] = ["All", ...config.stations.filter(s => s.active).map(s => s.name)];
+
+  const { data: tables = [] } = useQuery({
+    queryKey: ['tables'],
+    queryFn: () => getTablesFn(),
+  });
+
+  const { data: orders = [] } = useQuery({
+    queryKey: ['activeOrders'],
+    queryFn: () => getActiveOrdersFn(),
+    refetchInterval: refreshIntervalSec * 1000,
+  });
+
+  const advanceMutation = useMutation({
+    mutationFn: async ({ itemId, currentStatus }: { itemId: string; currentStatus: string }) => {
+      const next: Record<string, string> = {
+        new: "sent",
+        sent: "preparing",
+        preparing: "ready",
+        ready: "served",
+      };
+      await updateOrderItemStatusFn({ data: { itemId, status: next[currentStatus] || 'served' } });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['activeOrders'] });
+    }
+  });
 
   const tickets = useMemo(() => {
     return orders
@@ -63,22 +102,47 @@ function KdsPage() {
         {tickets.map(({ order, items }) => {
           const tableName = order.tableId ? tables.find((t) => t.id === order.tableId)?.name : null;
           const ageMin = Math.floor((Date.now() - order.createdAt) / 60000);
+          
+          let slaColor = "bg-green-500/10 text-green-600 border-green-500/20";
+          if (ageMin >= slaCriticalMin) slaColor = "bg-red-500/20 text-red-600 border-red-500/30 animate-pulse";
+          else if (ageMin >= slaWarningMin) slaColor = "bg-yellow-500/20 text-yellow-600 border-yellow-500/30";
+
           return (
-            <Card key={order.id} className="p-4 flex flex-col gap-2">
-              <div className="flex items-center justify-between">
-                <div className="font-semibold">{order.type === "dine-in" ? `Table ${tableName}` : order.customerName ?? "Takeaway"}</div>
-                <span className={cn("text-xs px-2 py-0.5 rounded-full", ageMin > 10 ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground")}>{ageMin}m</span>
+            <Card key={order.id} className={cn("p-4 flex flex-col gap-2 border-2", slaColor)}>
+              <div className="flex items-center justify-between pb-2 border-b border-black/10">
+                <div className="font-bold text-lg">{order.type === "dine-in" ? `Table ${tableName}` : order.customerName ?? "Takeaway"}</div>
+                <span className={cn("text-xs px-2.5 py-1 rounded-md font-bold bg-background")}>{ageMin} min</span>
               </div>
-              <ul className="space-y-1.5">
+              <ul className="space-y-3 mt-1">
                 {items.map((i) => (
-                  <li key={i.id} className="flex items-center justify-between gap-2 text-sm">
-                    <div>
-                      <div className="font-medium">{i.qty} × {i.name}</div>
-                      <div className="text-[11px] text-muted-foreground capitalize">{i.station} · {i.status}</div>
+                  <li key={i.id} className="flex items-start justify-between gap-2 text-sm bg-background/50 p-2 rounded-md">
+                    <div className="flex-1">
+                      <div className="font-semibold text-base">{i.qty} × {i.name}</div>
+                      {i.notes && <div className="text-[12px] text-red-600 font-bold uppercase tracking-wider mt-0.5 bg-red-100 inline-block px-1 rounded">*** {i.notes} ***</div>}
+                      <div className="text-[11px] text-muted-foreground capitalize mt-1">{i.station} · {i.status}</div>
                     </div>
-                    <Button size="sm" variant={i.status === "ready" ? "default" : "outline"} onClick={() => dispatch({ type: "ADVANCE_ITEM", orderId: order.id, itemId: i.id })}>
-                      {i.status === "sent" ? "Start" : i.status === "preparing" ? "Ready" : "Serve"}
-                    </Button>
+                    <div className="flex gap-2 shrink-0 mt-1">
+                      <Button 
+                        size="sm" 
+                        variant="destructive"
+                        onClick={() => {
+                          if (confirm("Void this item?")) {
+                            advanceMutation.mutate({ itemId: i.id, currentStatus: "void_override" });
+                          }
+                        }}
+                        disabled={advanceMutation.isPending}
+                      >
+                        Void
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        variant={i.status === "ready" ? "default" : "outline"} 
+                        onClick={() => advanceMutation.mutate({ itemId: i.id, currentStatus: i.status })}
+                        disabled={advanceMutation.isPending}
+                      >
+                        {i.status === "sent" ? "Start" : i.status === "preparing" ? "Ready" : "Serve"}
+                      </Button>
+                    </div>
                   </li>
                 ))}
               </ul>

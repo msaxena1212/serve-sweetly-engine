@@ -1,13 +1,14 @@
-import { usePos, newOrderItem, fmtMoney, type MenuCategory } from "@/lib/pos-store";
+import { usePos, newOrderItem, fmtMoney } from "@/lib/pos-store";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useMemo, useState } from "react";
-
-const cats: (MenuCategory | "All")[] = ["All", "Starters", "Mains", "Sides", "Desserts", "Beverages"];
+import { useConfig } from "@/lib/config-store";
 
 export function MenuPicker({ orderId }: { orderId: string }) {
   const { menu, dispatch } = usePos();
-  const [cat, setCat] = useState<(typeof cats)[number]>("All");
+  const { config } = useConfig();
+  const cats = ["All", ...config.categories.filter(c => c.active).map(c => c.name)];
+  const [cat, setCat] = useState<string>("All");
   const [q, setQ] = useState("");
 
   const items = useMemo(() => {
