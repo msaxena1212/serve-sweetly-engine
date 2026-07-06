@@ -73,11 +73,14 @@ export const orders = pgTable('orders', {
   id: serial('id').primaryKey(),
   tableId: integer('table_id').references(() => tables.id),
   type: text('type').notNull(), // 'dine-in', 'takeaway'
-  status: text('status').default('open').notNull(), // 'open', 'completed', 'cancelled'
+  customerName: text('customer_name'),
+  customerPhone: text('customer_phone'),
+  status: text('status').default('open').notNull(), // 'open', 'completed', 'cancelled', 'void'
   total: decimal('total', { precision: 10, scale: 2 }).default('0.00').notNull(),
   discountPct: decimal('discount_pct', { precision: 5, scale: 2 }).default('0.00').notNull(),
   taxPct: decimal('tax_pct', { precision: 5, scale: 2 }).default('0.00').notNull(),
   paymentMethodId: integer('payment_method_id').references(() => paymentMethods.id),
+  shiftId: integer('shift_id'), // Will be FK to shifts
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
@@ -112,5 +115,27 @@ export const purchaseOrders = pgTable('purchase_orders', {
   supplierId: integer('supplier_id').references(() => suppliers.id).notNull(),
   status: text('status').default('pending').notNull(), // 'pending', 'received', 'cancelled'
   totalAmount: decimal('total_amount', { precision: 10, scale: 2 }).default('0.00').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const shifts = pgTable('shifts', {
+  id: serial('id').primaryKey(),
+  openedBy: integer('opened_by').references(() => users.id).notNull(),
+  closedBy: integer('closed_by').references(() => users.id),
+  openingCash: decimal('opening_cash', { precision: 10, scale: 2 }).notNull(),
+  closingCash: decimal('closing_cash', { precision: 10, scale: 2 }),
+  expectedCash: decimal('expected_cash', { precision: 10, scale: 2 }),
+  variance: decimal('variance', { precision: 10, scale: 2 }),
+  status: text('status').default('open').notNull(), // 'open', 'closed'
+  openedAt: timestamp('opened_at').defaultNow().notNull(),
+  closedAt: timestamp('closed_at'),
+});
+
+export const refunds = pgTable('refunds', {
+  id: serial('id').primaryKey(),
+  orderId: integer('order_id').references(() => orders.id).notNull(),
+  amount: decimal('amount', { precision: 10, scale: 2 }).notNull(),
+  reason: text('reason').notNull(),
+  approvedBy: integer('approved_by').references(() => users.id).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });

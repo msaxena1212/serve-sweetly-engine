@@ -10,7 +10,9 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TakeawayRouteImport } from './routes/takeaway'
+import { Route as ShiftRouteImport } from './routes/shift'
 import { Route as ReportsRouteImport } from './routes/reports'
+import { Route as PurchasesRouteImport } from './routes/purchases'
 import { Route as PosRouteImport } from './routes/pos'
 import { Route as MenuRouteImport } from './routes/menu'
 import { Route as MastersRouteImport } from './routes/masters'
@@ -24,9 +26,19 @@ const TakeawayRoute = TakeawayRouteImport.update({
   path: '/takeaway',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ShiftRoute = ShiftRouteImport.update({
+  id: '/shift',
+  path: '/shift',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ReportsRoute = ReportsRouteImport.update({
   id: '/reports',
   path: '/reports',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PurchasesRoute = PurchasesRouteImport.update({
+  id: '/purchases',
+  path: '/purchases',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PosRoute = PosRouteImport.update({
@@ -73,7 +85,9 @@ export interface FileRoutesByFullPath {
   '/masters': typeof MastersRoute
   '/menu': typeof MenuRoute
   '/pos': typeof PosRoute
+  '/purchases': typeof PurchasesRoute
   '/reports': typeof ReportsRoute
+  '/shift': typeof ShiftRoute
   '/takeaway': typeof TakeawayRoute
 }
 export interface FileRoutesByTo {
@@ -84,7 +98,9 @@ export interface FileRoutesByTo {
   '/masters': typeof MastersRoute
   '/menu': typeof MenuRoute
   '/pos': typeof PosRoute
+  '/purchases': typeof PurchasesRoute
   '/reports': typeof ReportsRoute
+  '/shift': typeof ShiftRoute
   '/takeaway': typeof TakeawayRoute
 }
 export interface FileRoutesById {
@@ -96,7 +112,9 @@ export interface FileRoutesById {
   '/masters': typeof MastersRoute
   '/menu': typeof MenuRoute
   '/pos': typeof PosRoute
+  '/purchases': typeof PurchasesRoute
   '/reports': typeof ReportsRoute
+  '/shift': typeof ShiftRoute
   '/takeaway': typeof TakeawayRoute
 }
 export interface FileRouteTypes {
@@ -109,7 +127,9 @@ export interface FileRouteTypes {
     | '/masters'
     | '/menu'
     | '/pos'
+    | '/purchases'
     | '/reports'
+    | '/shift'
     | '/takeaway'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -120,7 +140,9 @@ export interface FileRouteTypes {
     | '/masters'
     | '/menu'
     | '/pos'
+    | '/purchases'
     | '/reports'
+    | '/shift'
     | '/takeaway'
   id:
     | '__root__'
@@ -131,7 +153,9 @@ export interface FileRouteTypes {
     | '/masters'
     | '/menu'
     | '/pos'
+    | '/purchases'
     | '/reports'
+    | '/shift'
     | '/takeaway'
   fileRoutesById: FileRoutesById
 }
@@ -143,7 +167,9 @@ export interface RootRouteChildren {
   MastersRoute: typeof MastersRoute
   MenuRoute: typeof MenuRoute
   PosRoute: typeof PosRoute
+  PurchasesRoute: typeof PurchasesRoute
   ReportsRoute: typeof ReportsRoute
+  ShiftRoute: typeof ShiftRoute
   TakeawayRoute: typeof TakeawayRoute
 }
 
@@ -156,11 +182,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TakeawayRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/shift': {
+      id: '/shift'
+      path: '/shift'
+      fullPath: '/shift'
+      preLoaderRoute: typeof ShiftRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/reports': {
       id: '/reports'
       path: '/reports'
       fullPath: '/reports'
       preLoaderRoute: typeof ReportsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/purchases': {
+      id: '/purchases'
+      path: '/purchases'
+      fullPath: '/purchases'
+      preLoaderRoute: typeof PurchasesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/pos': {
@@ -223,7 +263,9 @@ const rootRouteChildren: RootRouteChildren = {
   MastersRoute: MastersRoute,
   MenuRoute: MenuRoute,
   PosRoute: PosRoute,
+  PurchasesRoute: PurchasesRoute,
   ReportsRoute: ReportsRoute,
+  ShiftRoute: ShiftRoute,
   TakeawayRoute: TakeawayRoute,
 }
 export const routeTree = rootRouteImport

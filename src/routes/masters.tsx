@@ -1,7 +1,7 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useState } from "react";
 import {
-  useConfig, newConfigId,
+  useConfig, newConfigId, useSyncToDb,
   type MenuCategory, type KitchenStation, type TableSection,
   type PaymentMethod, type StaffRole, type TaxSlab, type DiscountType,
 } from "@/lib/config-store";
@@ -56,16 +56,35 @@ const CATEGORY_COLORS = [
 
 function MastersPage() {
   const [tab, setTab] = useState<TabId>("restaurant");
+  const [saving, setSaving] = useState(false);
+  const syncToDb = useSyncToDb();
+
+  const handleSaveAll = async () => {
+    setSaving(true);
+    try {
+      await syncToDb();
+      toast.success("All configuration saved to database!");
+    } catch {
+      toast.error("Failed to save to database.");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div className="flex h-screen flex-col">
       <header className="px-6 py-4 border-b bg-card flex items-center gap-3">
         <Settings2 className="h-5 w-5 text-primary" />
-        <div>
+        <div className="flex-1">
           <h1 className="text-xl font-semibold">Configuration Masters</h1>
           <p className="text-xs text-muted-foreground">All data points are configurable — changes apply immediately across the app.</p>
         </div>
+        <Button onClick={handleSaveAll} disabled={saving} size="sm" className="gap-2">
+          {saving ? <RefreshCcw className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+          {saving ? "Saving…" : "Save to Database"}
+        </Button>
       </header>
+
 
       <div className="flex flex-1 min-h-0">
         {/* Vertical Tab Nav */}

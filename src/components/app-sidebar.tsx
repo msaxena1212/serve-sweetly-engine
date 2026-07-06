@@ -1,7 +1,7 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
   LayoutDashboard, Utensils, ShoppingBag, ChefHat,
-  BookOpen, Boxes, BarChart3, Settings2
+  BookOpen, Boxes, BarChart3, Settings2, ShoppingCart, Wallet
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useConfig } from "@/lib/config-store";
@@ -14,10 +14,12 @@ const OPS_ITEMS = [
 ];
 
 const MGMT_ITEMS = [
-  { to: "/menu",      label: "Menu",      icon: BookOpen },
-  { to: "/inventory", label: "Inventory", icon: Boxes },
-  { to: "/reports",   label: "Reports",   icon: BarChart3 },
-  { to: "/masters",   label: "Masters",   icon: Settings2 },
+  { to: "/menu",      label: "Menu",       icon: BookOpen },
+  { to: "/inventory", label: "Inventory",  icon: Boxes },
+  { to: "/purchases", label: "Purchases",  icon: ShoppingCart },
+  { to: "/reports",   label: "Reports",    icon: BarChart3 },
+  { to: "/masters",   label: "Masters",    icon: Settings2 },
+  { to: "/shift",     label: "Shift",      icon: Wallet },
 ];
 
 export function AppSidebar() {

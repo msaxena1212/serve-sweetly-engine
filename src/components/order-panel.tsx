@@ -79,15 +79,23 @@ export function OrderPanel({ order }: { order: Order }) {
           <Button variant="outline" disabled={!hasUnsent} onClick={async () => { 
             dispatch({ type: "SEND_KOT", orderId: order.id }); 
             toast.success("KOT sent to kitchen"); 
-            try {
-              const { addOrderItemFn } = await import('@/lib/api');
-              const unsent = order.items.filter((i) => i.status === "new");
-              for (const item of unsent) {
-                await addOrderItemFn({ data: { orderId: order.id, menuItemId: item.menuItemId, quantity: item.qty, notes: item.notes } });
+            
+            // Only sync to DB if the order has a real numeric DB ID
+            const numericOrderId = parseInt(order.id);
+            if (!isNaN(numericOrderId)) {
+              try {
+                const { addOrderItemFn } = await import('@/lib/api');
+                const unsent = order.items.filter((i) => i.status === "new");
+                for (const item of unsent) {
+                  const numericMenuItemId = parseInt(item.menuItemId);
+                  if (!isNaN(numericMenuItemId)) {
+                    await addOrderItemFn({ data: { orderId: order.id, menuItemId: item.menuItemId, quantity: item.qty, notes: item.notes } });
+                  }
+                }
+              } catch (e) {
+                console.error(e);
+                toast.error("Failed to sync KOT with server");
               }
-            } catch (e) {
-              console.error(e);
-              toast.error("Failed to sync KOT with server");
             }
           }}>
             <Send /> Send KOT

@@ -6,7 +6,17 @@
  * All components should read from this store instead of using hardcoded arrays.
  */
 
-import { createContext, useContext, useEffect, useReducer, useMemo, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useReducer, useMemo, useCallback, type ReactNode } from "react";
+import {
+  getStationsFn, getTableSectionsFn, getPaymentMethodsFn, getTaxSlabsFn,
+  getCategoriesFn, getSystemConfigFn,
+  upsertStationFn, deleteStationFn,
+  upsertTableSectionFn, deleteTableSectionFn,
+  upsertPaymentMethodFn, deletePaymentMethodFn,
+  upsertTaxSlabFn, deleteTaxSlabFn,
+  upsertCategoryFn, deleteCategoryFn,
+  setSystemConfigFn,
+} from './api';
 
 // ─── Types ─────────────────────────────────────────────────────
 
@@ -313,6 +323,7 @@ const CONFIG_STORAGE_KEY = "pos-config-v1";
 interface ConfigCtx {
   config: AppConfig;
   dispatch: React.Dispatch<ConfigAction>;
+  syncToDb: () => Promise<void>;
 }
 
 const ConfigContext = createContext<ConfigCtx | null>(null);
@@ -320,26 +331,86 @@ const ConfigContext = createContext<ConfigCtx | null>(null);
 export function ConfigStoreProvider({ children }: { children: ReactNode }) {
   const [config, dispatch] = useReducer(configReducer, DEFAULT_CONFIG);
 
-  // Hydrate from localStorage on mount
+  // ── Fast-boot: hydrate from localStorage first ──
   useEffect(() => {
     try {
       const raw = typeof window !== "undefined" ? window.localStorage.getItem(CONFIG_STORAGE_KEY) : null;
       if (raw) {
         const saved = JSON.parse(raw) as AppConfig;
-        // Deep merge saved config with defaults to handle newly added keys
         dispatch({ type: "HYDRATE", payload: deepMerge(DEFAULT_CONFIG, saved) });
       }
     } catch { /* ignore */ }
   }, []);
 
-  // Persist on every change
+  // ── Hydrate from DB on mount (authoritative source) ──
+  useEffect(() => {
+    async function loadFromDb() {
+      try {
+        const [dbStations, dbSections, dbPayments, dbTaxSlabs, dbCategories, dbSysConfig] = await Promise.all([
+          getStationsFn(),
+          getTableSectionsFn(),
+          getPaymentMethodsFn(),
+          getTaxSlabsFn(),
+          getCategoriesFn(),
+          getSystemConfigFn(),
+        ]);
+
+        dispatch({
+          type: "HYDRATE",
+          payload: deepMerge(DEFAULT_CONFIG, {
+            stations: dbStations.length > 0
+              ? dbStations.map((s, i) => ({ id: s.id, name: s.name, active: s.active, sortOrder: i + 1 }))
+              : DEFAULT_CONFIG.stations,
+            tableSections: dbSections.length > 0
+              ? dbSections.map((s, i) => ({ id: s.id, name: s.name, prefix: s.prefix, active: s.active, sortOrder: i + 1 }))
+              : DEFAULT_CONFIG.tableSections,
+            paymentMethods: dbPayments.length > 0
+              ? dbPayments.map(p => ({ id: p.id, name: p.name, type: p.type as PaymentMethod['type'], active: p.active }))
+              : DEFAULT_CONFIG.paymentMethods,
+            taxSlabs: dbTaxSlabs.length > 0
+              ? dbTaxSlabs.map(t => ({ id: t.id, name: t.name, rate: t.rate, isDefault: t.isDefault, active: t.active }))
+              : DEFAULT_CONFIG.taxSlabs,
+            categories: dbCategories.length > 0
+              ? dbCategories.map((c, i) => ({ id: c.id, name: c.name, active: c.active, sortOrder: i + 1 }))
+              : DEFAULT_CONFIG.categories,
+            kds: (dbSysConfig as any)?.kds ?? DEFAULT_CONFIG.kds,
+            billing: (dbSysConfig as any)?.billing ?? DEFAULT_CONFIG.billing,
+            takeaway: (dbSysConfig as any)?.takeaway ?? DEFAULT_CONFIG.takeaway,
+            shift: (dbSysConfig as any)?.shift ?? DEFAULT_CONFIG.shift,
+            restaurant: (dbSysConfig as any)?.restaurant ?? DEFAULT_CONFIG.restaurant,
+          } as Partial<AppConfig>),
+        });
+      } catch {
+        // If DB fails (e.g. not logged in yet), fall through — localStorage values remain
+      }
+    }
+    loadFromDb();
+  }, []);
+
+  // ── Persist to localStorage as cache ──
   useEffect(() => {
     try {
       window.localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(config));
     } catch { /* ignore */ }
   }, [config]);
 
-  const value = useMemo(() => ({ config, dispatch }), [config]);
+  // ── Sync current config to DB ──
+  const syncToDb = useCallback(async () => {
+    await Promise.all([
+      ...config.stations.map(s => upsertStationFn({ data: { id: s.id.startsWith('stn-') ? undefined : s.id, name: s.name, active: s.active } })),
+      ...config.tableSections.map(s => upsertTableSectionFn({ data: { id: s.id.startsWith('sec-') ? undefined : s.id, name: s.name, prefix: s.prefix, active: s.active } })),
+      ...config.paymentMethods.map(p => upsertPaymentMethodFn({ data: { id: p.id.startsWith('pm-') ? undefined : p.id, name: p.name, type: p.type, active: p.active } })),
+      ...config.taxSlabs.map(t => upsertTaxSlabFn({ data: { id: t.id.startsWith('tax-') ? undefined : t.id, name: t.name, rate: t.rate, isDefault: t.isDefault, active: t.active } })),
+      ...config.categories.map(c => upsertCategoryFn({ data: { id: c.id.startsWith('cat-') ? undefined : c.id, name: c.name, active: c.active } })),
+      setSystemConfigFn({ data: { key: 'kds', value: config.kds } }),
+      setSystemConfigFn({ data: { key: 'billing', value: config.billing } }),
+      setSystemConfigFn({ data: { key: 'takeaway', value: config.takeaway } }),
+      setSystemConfigFn({ data: { key: 'shift', value: config.shift } }),
+      setSystemConfigFn({ data: { key: 'restaurant', value: config.restaurant } }),
+    ]);
+  }, [config]);
+
+  const value = useMemo(() => ({ config, dispatch, syncToDb }), [config, syncToDb]);
   return <ConfigContext.Provider value={value}>{children}</ConfigContext.Provider>;
 }
 
@@ -347,6 +418,11 @@ export function useConfig() {
   const ctx = useContext(ConfigContext);
   if (!ctx) throw new Error("useConfig must be inside ConfigStoreProvider");
   return ctx;
+}
+
+/** Convenience alias for direct sync calls in components. */
+export function useSyncToDb() {
+  return useConfig().syncToDb;
 }
 
 // ─── Helpers ───────────────────────────────────────────────────

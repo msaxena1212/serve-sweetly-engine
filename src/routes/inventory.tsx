@@ -3,15 +3,24 @@ import { usePos, fmtMoney } from "@/lib/pos-store";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Minus, AlertTriangle, ShoppingCart, Package, X, Check, TrendingDown } from "lucide-react";
+import { Plus, Minus, AlertTriangle, ShoppingCart, Package, X, Check, TrendingDown, ClipboardCheck, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { getInventoryItemsFn, physicalStockCountFn } from "@/lib/api";
 
 export const Route = createFileRoute("/inventory")({
   beforeLoad: ({ context }) => {
     if (!context.session) {
       throw redirect({ to: '/login' });
+    }
+  },
+  loader: async () => {
+    try {
+      const items = await getInventoryItemsFn();
+      return { dbInventory: items };
+    } catch {
+      return { dbInventory: [] };
     }
   },
   head: () => ({
@@ -36,8 +45,9 @@ interface PurchaseOrder {
 const SUPPLIER_LIST = ["FreshMart Wholesale", "Metro Cash & Carry", "Raj Provisions", "Local Farm Co."];
 
 function InventoryPage() {
+  const { dbInventory } = Route.useLoaderData();
   const { menu, dispatch } = usePos();
-  const [tab, setTab] = useState<"stock" | "orders">("stock");
+  const [tab, setTab] = useState<"stock" | "orders" | "count">("stock");
   const [search, setSearch] = useState("");
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
   const [showNewOrder, setShowNewOrder] = useState(false);
@@ -46,6 +56,12 @@ function InventoryPage() {
     items: [],
   });
   const [adjustQty, setAdjustQty] = useState<Record<string, string>>({});
+
+  // Physical count state
+  const [countValues, setCountValues] = useState<Record<string, string>>({});
+  const [countResults, setCountResults] = useState<Array<{ id: string; name: string; systemQty: number; actualQty: number; variance: number }>>([]);
+  const [countLoading, setCountLoading] = useState(false);
+  const [countDone, setCountDone] = useState(false);
 
   const low = menu.filter((m) => m.stock <= 10);
   const filtered = menu.filter((m) =>
@@ -97,6 +113,31 @@ function InventoryPage() {
     toast.success(`Stock adjusted by ${val > 0 ? "+" : ""}${val}`);
   };
 
+  // ─── Physical count submit ──────────────────────────────
+  const submitPhysicalCount = async () => {
+    const counts = dbInventory
+      .filter(item => countValues[item.id] !== undefined && countValues[item.id] !== "")
+      .map(item => ({ id: item.id, actualQty: parseFloat(countValues[item.id]) }));
+
+    if (counts.length === 0) { toast.error("Enter at least one actual quantity."); return; }
+
+    setCountLoading(true);
+    try {
+      const result = await physicalStockCountFn({ data: { counts } });
+      const resultWithNames = result.results.map(r => ({
+        ...r,
+        name: dbInventory.find(i => i.id === r.id)?.name || r.id,
+      }));
+      setCountResults(resultWithNames);
+      setCountDone(true);
+      toast.success(`Physical count saved for ${counts.length} items.`);
+    } catch (e: any) {
+      toast.error(e.message || "Failed to save count.");
+    } finally {
+      setCountLoading(false);
+    }
+  };
+
   return (
     <div className="p-6 space-y-5">
       {/* Header */}
@@ -124,6 +165,13 @@ function InventoryPage() {
                 {orders.filter((o) => o.status === "sent").length}
               </span>
             )}
+          </Button>
+          <Button
+            variant={tab === "count" ? "default" : "outline"}
+            size="sm"
+            onClick={() => { setTab("count"); setCountDone(false); setCountValues({}); setCountResults([]); }}
+          >
+            <ClipboardCheck className="h-3.5 w-3.5 mr-1.5" /> Physical Count
           </Button>
         </div>
       </header>
@@ -401,6 +449,105 @@ function InventoryPage() {
               </Card>
             )}
           </div>
+        </div>
+      )}
+
+      {/* PHYSICAL COUNT TAB */}
+      {tab === "count" && (
+        <div className="space-y-4">
+          {!countDone ? (
+            <>
+              <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 text-sm flex items-start gap-3">
+                <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-semibold text-amber-700">Physical Stock Count</p>
+                  <p className="text-muted-foreground mt-0.5">Enter the actual counted quantities below. Leave blank to skip an item. Variances will be calculated and stock will be updated.</p>
+                </div>
+              </div>
+
+              <Card className="overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
+                    <tr>
+                      <th className="text-left px-4 py-2.5">Inventory Item</th>
+                      <th className="text-center px-4 py-2.5">Unit</th>
+                      <th className="text-right px-4 py-2.5">System Qty</th>
+                      <th className="text-right px-4 py-2.5 w-36">Actual Qty</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dbInventory.length === 0 && (
+                      <tr><td colSpan={4} className="text-center py-8 text-muted-foreground text-sm">No inventory items. Add items via Masters → Inventory.</td></tr>
+                    )}
+                    {dbInventory.map(item => (
+                      <tr key={item.id} className="border-t">
+                        <td className="px-4 py-2.5 font-medium">{item.name}</td>
+                        <td className="px-4 py-2.5 text-center text-muted-foreground">{item.unit}</td>
+                        <td className="px-4 py-2.5 text-right text-muted-foreground">{item.quantity}</td>
+                        <td className="px-4 py-2.5">
+                          <Input
+                            type="number"
+                            placeholder="—"
+                            className="h-7 w-24 text-center ml-auto"
+                            value={countValues[item.id] || ""}
+                            onChange={e => setCountValues(p => ({ ...p, [item.id]: e.target.value }))}
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </Card>
+
+              <div className="flex justify-end">
+                <Button className="h-10 px-6" onClick={submitPhysicalCount} disabled={countLoading}>
+                  {countLoading ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <ClipboardCheck className="h-4 w-4 mr-1.5" />}
+                  Submit Count & Sync Inventory
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-4 text-sm flex items-start gap-3">
+                <Check className="h-4 w-4 text-green-600 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-semibold text-green-700">Count Complete</p>
+                  <p className="text-muted-foreground mt-0.5">Inventory has been updated. Review variances below.</p>
+                </div>
+              </div>
+
+              <Card className="overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
+                    <tr>
+                      <th className="text-left px-4 py-2.5">Item</th>
+                      <th className="text-right px-4 py-2.5">System Qty</th>
+                      <th className="text-right px-4 py-2.5">Actual Qty</th>
+                      <th className="text-right px-4 py-2.5">Variance</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {countResults.map(r => (
+                      <tr key={r.id} className={cn("border-t", r.variance < 0 ? "bg-red-500/5" : r.variance > 0 ? "bg-green-500/5" : "")}>
+                        <td className="px-4 py-2.5 font-medium">{r.name}</td>
+                        <td className="px-4 py-2.5 text-right text-muted-foreground">{r.systemQty}</td>
+                        <td className="px-4 py-2.5 text-right">{r.actualQty}</td>
+                        <td className={cn("px-4 py-2.5 text-right font-bold", r.variance < 0 ? "text-red-600" : r.variance > 0 ? "text-green-600" : "text-muted-foreground")}>
+                          {r.variance > 0 ? `+${r.variance.toFixed(2)}` : r.variance.toFixed(2)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </Card>
+
+              <div className="flex justify-end">
+                <Button variant="outline" onClick={() => { setCountDone(false); setCountValues({}); setCountResults([]); }}>
+                  Start Another Count
+                </Button>
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>

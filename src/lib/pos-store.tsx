@@ -45,7 +45,7 @@ export interface Table {
   id: string;
   name: string;
   seats: number;
-  section: "Main" | "Patio" | "Bar";
+  section: string; // dynamic — matches config.tableSections names
 }
 
 interface State {
@@ -294,9 +294,19 @@ export function PosStoreProvider({ children }: { children: ReactNode }) {
     const openOrderForTable = async (tableId: string) => {
       const existing = state.orders.find((o) => o.type === "dine-in" && o.tableId === tableId && o.status === "open");
       if (existing) return existing;
-      
+
+      // Create in DB first, use real DB ID
+      let dbId = `o-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      try {
+        const { createOrderFn } = await import('./api');
+        const res = await createOrderFn({ data: { type: 'dine-in', tableId } });
+        dbId = res.id;
+      } catch (err) {
+        console.error('Failed to save order to DB', err);
+      }
+
       const order: Order = {
-        id: `o-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        id: dbId,
         type: "dine-in",
         tableId,
         items: [],
@@ -306,20 +316,21 @@ export function PosStoreProvider({ children }: { children: ReactNode }) {
         taxPct: config.billing.defaultTaxPct,
       };
       dispatch({ type: "CREATE_ORDER", payload: order });
-      
-      // Sync to DB
-      try {
-        const { createOrderFn } = await import('./api');
-        const res = await createOrderFn({ data: { type: 'dine-in', tableId } });
-        order.id = res.id; // Update with DB ID
-      } catch (err) {
-        console.error('Failed to save order to DB', err);
-      }
       return order;
     };
     const openTakeawayOrder = async (customerName: string) => {
+      // Create in DB first, use real DB ID
+      let dbId = `o-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      try {
+        const { createOrderFn } = await import('./api');
+        const res = await createOrderFn({ data: { type: 'takeaway', customerName } });
+        dbId = res.id;
+      } catch (err) {
+        console.error('Failed to save takeaway order to DB', err);
+      }
+
       const order: Order = {
-        id: `o-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        id: dbId,
         type: "takeaway",
         customerName,
         items: [],
@@ -329,12 +340,6 @@ export function PosStoreProvider({ children }: { children: ReactNode }) {
         taxPct: config.billing.defaultTaxPct,
       };
       dispatch({ type: "CREATE_ORDER", payload: order });
-
-      try {
-        const { createOrderFn } = await import('./api');
-        const res = await createOrderFn({ data: { type: 'takeaway', customerName } });
-        order.id = res.id;
-      } catch (err) {}
       return order;
     };
     const getOrderTotals = (order: Order) => {
