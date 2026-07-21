@@ -250,8 +250,8 @@ function reducer(state: State, action: Action): State {
 
 interface Ctx extends State {
   dispatch: React.Dispatch<Action>;
-  openOrderForTable: (tableId: string) => Order;
-  openTakeawayOrder: (customerName: string) => Order;
+  openOrderForTable: (tableId: string) => Promise<Order>;
+  openTakeawayOrder: (customerName: string) => Promise<Order>;
   getOrderTotals: (order: Order) => { subtotal: number; discount: number; tax: number; total: number };
 }
 
@@ -270,7 +270,7 @@ export function PosStoreProvider({ children }: { children: ReactNode }) {
       if (raw) dispatch({ type: "HYDRATE", payload: JSON.parse(raw) as State });
       
       // Fetch fresh data from DB to override local storage menu/tables
-      Promise.all([getMenuFn(), getTablesFn()]).then(([dbMenu, dbTables]) => {
+      Promise.all([getMenuFn(), getTablesFn({ data: { branchId: config.activeBranchId } })]).then(([dbMenu, dbTables]) => {
         dispatch({ 
           type: "HYDRATE", 
           payload: {
@@ -282,7 +282,7 @@ export function PosStoreProvider({ children }: { children: ReactNode }) {
         });
       });
     } catch {}
-  }, []);
+  }, [config.activeBranchId]);
 
   useEffect(() => {
     try {
@@ -299,7 +299,7 @@ export function PosStoreProvider({ children }: { children: ReactNode }) {
       let dbId = `o-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       try {
         const { createOrderFn } = await import('./api');
-        const res = await createOrderFn({ data: { type: 'dine-in', tableId } });
+        const res = await createOrderFn({ data: { type: 'dine-in', tableId, branchId: config.activeBranchId } });
         dbId = res.id;
       } catch (err) {
         console.error('Failed to save order to DB', err);
@@ -323,7 +323,7 @@ export function PosStoreProvider({ children }: { children: ReactNode }) {
       let dbId = `o-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       try {
         const { createOrderFn } = await import('./api');
-        const res = await createOrderFn({ data: { type: 'takeaway', customerName } });
+        const res = await createOrderFn({ data: { type: 'takeaway', customerName, branchId: config.activeBranchId } });
         dbId = res.id;
       } catch (err) {
         console.error('Failed to save takeaway order to DB', err);

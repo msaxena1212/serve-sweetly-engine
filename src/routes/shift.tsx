@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { Wallet, LogOut, CheckCircle } from "lucide-react";
 import { getShiftStatusFn, openShiftFn, closeShiftFn } from "@/lib/api";
+import { useConfig } from "@/lib/config-store";
 
 export const Route = createFileRoute("/shift")({
   beforeLoad: async ({ context }) => {
@@ -14,7 +15,8 @@ export const Route = createFileRoute("/shift")({
     }
   },
   loader: async () => {
-    return await getShiftStatusFn();
+    // branchId read on client, loader uses fallback
+    return await getShiftStatusFn({ data: { branchId: 'br-1' } });
   },
   component: ShiftPage,
 });
@@ -22,6 +24,8 @@ export const Route = createFileRoute("/shift")({
 function ShiftPage() {
   const router = useRouter();
   const { isActive, shift } = Route.useLoaderData();
+  const { config } = useConfig();
+  const branchId = config.activeBranchId;
   const [loading, setLoading] = useState(false);
 
   // Form states
@@ -36,7 +40,7 @@ function ShiftPage() {
     }
     setLoading(true);
     try {
-      await openShiftFn({ data: { openingCash: parseFloat(openingCash) } });
+      await openShiftFn({ data: { openingCash: parseFloat(openingCash), branchId } });
       toast.success("Shift opened successfully.");
       router.invalidate();
     } catch (e: any) {
@@ -52,15 +56,14 @@ function ShiftPage() {
       return;
     }
     
-    // For demo purposes, we will mock the expected cash since we're not aggregating all payments locally yet.
-    // In a real system, `expectedCash` = openingCash + Cash Payments - Cash Refunds.
+    // expectedCash = openingCash + Cash Payments - Cash Refunds.
     const actual = parseFloat(closingCash);
     const expected = expectedCash ? parseFloat(expectedCash) : parseFloat(shift?.openingCash || "0");
     const variance = actual - expected;
 
     setLoading(true);
     try {
-      await closeShiftFn({ data: { closingCash: actual, expectedCash: expected, variance } });
+      await closeShiftFn({ data: { closingCash: actual, expectedCash: expected, variance, branchId } });
       toast.success(`Shift closed. Variance: ₹${variance.toFixed(2)}`);
       router.invalidate();
     } catch (e: any) {

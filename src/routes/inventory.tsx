@@ -4,10 +4,11 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Plus, Minus, AlertTriangle, ShoppingCart, Package, X, Check, TrendingDown, ClipboardCheck, Loader2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { getInventoryItemsFn, physicalStockCountFn } from "@/lib/api";
+import { getInventoryItemsFn, physicalStockCountFn, getSuppliersFn, createPurchaseOrderFn, getInventoryLedgerFn } from "@/lib/api";
+import { useConfig } from "@/lib/config-store";
 
 export const Route = createFileRoute("/inventory")({
   beforeLoad: ({ context }) => {
@@ -37,22 +38,26 @@ interface PurchaseItem { menuItemId: string; name: string; qty: number; unitCost
 interface PurchaseOrder {
   id: string;
   supplier: string;
+  supplierId?: string;
   items: PurchaseItem[];
   status: "draft" | "sent" | "received";
   createdAt: number;
 }
 
-const SUPPLIER_LIST = ["FreshMart Wholesale", "Metro Cash & Carry", "Raj Provisions", "Local Farm Co."];
+interface Supplier { id: string; name: string; contactInfo: string; }
 
 function InventoryPage() {
   const { dbInventory } = Route.useLoaderData();
   const { menu, dispatch } = usePos();
-  const [tab, setTab] = useState<"stock" | "orders" | "count">("stock");
+  const { config } = useConfig();
+  const branchId = config.activeBranchId;
+  const [tab, setTab] = useState<"stock" | "orders" | "count" | "ledger">("stock");
   const [search, setSearch] = useState("");
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [showNewOrder, setShowNewOrder] = useState(false);
-  const [newOrder, setNewOrder] = useState<{ supplier: string; items: PurchaseItem[] }>({
-    supplier: SUPPLIER_LIST[0],
+  const [newOrder, setNewOrder] = useState<{ supplierId: string; items: PurchaseItem[] }>({
+    supplierId: "",
     items: [],
   });
   const [adjustQty, setAdjustQty] = useState<Record<string, string>>({});
@@ -69,6 +74,22 @@ function InventoryPage() {
     m.category.toLowerCase().includes(search.toLowerCase())
   );
 
+  useEffect(() => {
+    const loadSuppliers = async () => {
+      try {
+        const result = await getSuppliersFn();
+        setSuppliers(result);
+        if (result.length > 0 && !newOrder.supplierId) {
+          setNewOrder((prev) => ({ ...prev, supplierId: result[0].id }));
+        }
+      } catch {
+        setSuppliers([]);
+      }
+    };
+
+    loadSuppliers();
+  }, []);
+
   const addToOrder = (item: typeof menu[0]) => {
     setNewOrder((prev) => {
       const exists = prev.items.find((i) => i.menuItemId === item.id);
@@ -80,19 +101,37 @@ function InventoryPage() {
     setShowNewOrder(true);
   };
 
-  const submitOrder = () => {
+  const submitOrder = async () => {
+    if (!newOrder.supplierId) { toast.error("Select a supplier"); return; }
     if (newOrder.items.length === 0) { toast.error("Add at least one item"); return; }
-    const order: PurchaseOrder = {
-      id: `po-${Date.now()}`,
-      supplier: newOrder.supplier,
-      items: newOrder.items,
-      status: "sent",
-      createdAt: Date.now(),
-    };
-    setOrders((prev) => [order, ...prev]);
-    setNewOrder({ supplier: SUPPLIER_LIST[0], items: [] });
-    setShowNewOrder(false);
-    toast.success(`Purchase order sent to ${order.supplier}`);
+
+    try {
+      const supplier = suppliers.find((s) => s.id === newOrder.supplierId);
+      if (!supplier) { toast.error("Selected supplier not found"); return; }
+
+      const response = await createPurchaseOrderFn({
+        data: {
+          supplierId: newOrder.supplierId,
+          branchId,
+          items: newOrder.items.map((item) => ({ inventoryId: item.menuItemId, qty: item.qty, unitPrice: item.unitCost })),
+        },
+      });
+
+      const order: PurchaseOrder = {
+        id: response.id || `po-${Date.now()}`,
+        supplier: supplier.name,
+        supplierId: newOrder.supplierId,
+        items: newOrder.items,
+        status: "sent",
+        createdAt: Date.now(),
+      };
+      setOrders((prev) => [order, ...prev]);
+      setNewOrder({ supplierId: newOrder.supplierId, items: [] });
+      setShowNewOrder(false);
+      toast.success(`Purchase order sent to ${supplier.name}`);
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to create purchase order");
+    }
   };
 
   const receiveOrder = (id: string) => {
@@ -172,6 +211,13 @@ function InventoryPage() {
             onClick={() => { setTab("count"); setCountDone(false); setCountValues({}); setCountResults([]); }}
           >
             <ClipboardCheck className="h-3.5 w-3.5 mr-1.5" /> Physical Count
+          </Button>
+          <Button
+            variant={tab === "ledger" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setTab("ledger")}
+          >
+            <Package className="h-3.5 w-3.5 mr-1.5" /> Raw Materials & Ledger
           </Button>
         </div>
       </header>
@@ -364,10 +410,13 @@ function InventoryPage() {
                   <label className="text-xs text-muted-foreground mb-1 block">Supplier</label>
                   <select
                     className="w-full h-9 rounded-md border bg-background px-3 text-sm"
-                    value={newOrder.supplier}
-                    onChange={(e) => setNewOrder((p) => ({ ...p, supplier: e.target.value }))}
+                    value={newOrder.supplierId}
+                    onChange={(e) => setNewOrder((p) => ({ ...p, supplierId: e.target.value }))}
                   >
-                    {SUPPLIER_LIST.map((s) => <option key={s}>{s}</option>)}
+                    <option value="">— Select Supplier —</option>
+                    {suppliers.map((supplier) => (
+                      <option key={supplier.id} value={supplier.id}>{supplier.name}</option>
+                    ))}
                   </select>
                 </div>
 
@@ -550,6 +599,110 @@ function InventoryPage() {
           )}
         </div>
       )}
+
+      {/* LEDGER TAB */}
+      {tab === "ledger" && (
+        <div className="space-y-4">
+          <h2 className="text-sm font-semibold">Raw Materials & Ledger History</h2>
+          <div className="grid md:grid-cols-2 gap-4">
+            <Card className="p-0 overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
+                  <tr>
+                    <th className="text-left px-4 py-2">Item</th>
+                    <th className="text-right px-4 py-2">In Stock</th>
+                    <th className="px-4 py-2"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {dbInventory.map(item => (
+                    <tr key={item.id} className="hover:bg-muted/50 transition-colors">
+                      <td className="px-4 py-2 font-medium">{item.name}</td>
+                      <td className="px-4 py-2 text-right">{item.quantity} {item.unit}</td>
+                      <td className="px-4 py-2 text-right">
+                        <LedgerViewer inventoryId={item.id} itemName={item.name} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </Card>
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+function LedgerViewer({ inventoryId, itemName }: { inventoryId: string; itemName: string }) {
+  const [open, setOpen] = useState(false);
+  const [ledger, setLedger] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const fetchLedger = async () => {
+    setOpen(true);
+    setLoading(true);
+    try {
+      const data = await getInventoryLedgerFn({ data: { inventoryId } });
+      setLedger(data);
+    } catch {
+      toast.error("Failed to load ledger");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <>
+      <Button size="sm" variant="outline" onClick={fetchLedger}>View Ledger</Button>
+      {open && (
+        <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <Card className="w-full max-w-2xl max-h-[80vh] flex flex-col shadow-lg border">
+            <div className="p-4 border-b flex justify-between items-center">
+              <h2 className="font-semibold text-lg">Ledger: {itemName}</h2>
+              <Button size="icon" variant="ghost" onClick={() => setOpen(false)}><X className="h-4 w-4" /></Button>
+            </div>
+            <div className="flex-1 overflow-auto p-4">
+              {loading ? (
+                <div className="flex items-center justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+              ) : ledger.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground text-sm">No ledger history found for this item.</div>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50 text-xs text-muted-foreground">
+                    <tr>
+                      <th className="text-left px-4 py-2 rounded-l-md">Date</th>
+                      <th className="text-left px-4 py-2">Type</th>
+                      <th className="text-right px-4 py-2">Ref</th>
+                      <th className="text-right px-4 py-2">Change</th>
+                      <th className="text-right px-4 py-2 rounded-r-md">Balance</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {ledger.map(l => (
+                      <tr key={l.id}>
+                        <td className="px-4 py-2 text-muted-foreground">
+                          {new Date(l.createdAt).toLocaleString()}
+                        </td>
+                        <td className="px-4 py-2 font-medium text-xs">
+                          <span className={cn("px-2 py-1 rounded bg-muted", l.transactionType === 'PURCHASE' ? 'text-green-600 bg-green-500/10' : 'text-amber-600 bg-amber-500/10')}>
+                            {l.transactionType}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2 text-right text-xs text-muted-foreground">{l.referenceId || '-'}</td>
+                        <td className={cn("px-4 py-2 text-right font-medium", l.quantityChange > 0 ? 'text-green-600' : 'text-red-600')}>
+                          {l.quantityChange > 0 ? '+' : ''}{l.quantityChange}
+                        </td>
+                        <td className="px-4 py-2 text-right font-bold">{l.runningBalance}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </Card>
+        </div>
+      )}
+    </>
   );
 }

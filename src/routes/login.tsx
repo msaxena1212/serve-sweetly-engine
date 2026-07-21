@@ -52,16 +52,15 @@ function LoginScreen() {
   };
 
   const addNumber = (num: string) => {
-    setPin(prev => {
-      if (prev.length >= 4) return prev;
-      const next = prev + num;
-      if (next.length === 4) {
-        // auto-submit after a short tick to let state update render
-        setTimeout(() => doLogin(next), 80);
-      }
-      return next;
-    });
+    setPin(prev => (prev.length >= 4 ? prev : prev + num));
   };
+
+  useEffect(() => {
+    if (pin.length === 4) {
+      const timer = setTimeout(() => doLogin(pin), 80);
+      return () => clearTimeout(timer);
+    }
+  }, [pin]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -71,15 +70,22 @@ function LoginScreen() {
   // Keyboard support
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key >= '0' && e.key <= '9') addNumber(e.key);
-      else if (e.key === 'Backspace') setPin(prev => prev.slice(0, -1));
-      else if (e.key === 'Enter') {
-        setPin(prev => { if (prev.length === 4) doLogin(prev); return prev; });
+      if (e.key >= '0' && e.key <= '9') {
+        setPin(prev => (prev.length >= 4 ? prev : prev + e.key));
+      } else if (e.key === 'Backspace') {
+        setPin(prev => prev.slice(0, -1));
+      } else if (e.key === 'Enter') {
+        setPin(prev => {
+          if (prev.length === 4) {
+             // Let the other useEffect handle the auto-login, or do it manually here.
+             // It's already handled by the pin.length === 4 effect.
+          }
+          return prev;
+        });
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (

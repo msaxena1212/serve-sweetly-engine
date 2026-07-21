@@ -2,7 +2,7 @@ import { useState } from "react";
 import { usePos, fmtMoney, type Order } from "@/lib/pos-store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { CreditCard, Banknote, Smartphone, X, Check, Wallet } from "lucide-react";
+import { CreditCard, Banknote, Smartphone, X, Check, Wallet, Printer } from "lucide-react";
 import { useConfig } from "@/lib/config-store";
 
 interface PaymentModalProps {
@@ -36,6 +36,10 @@ export function PaymentModal({ order, onClose }: PaymentModalProps) {
     Math.ceil(totals.total / 1000) * 1000,
   ].filter((v, i, arr) => arr.indexOf(v) === i).slice(0, 3);
 
+  const [showInvoice, setShowInvoice] = useState(false);
+
+  const paidTotal = showInvoice ? totals.total : 0;
+
   const handlePay = async () => {
     dispatch({ type: "PAY", orderId: order.id, method: methodId, discountPct: discount });
     setPaid(true);
@@ -43,13 +47,21 @@ export function PaymentModal({ order, onClose }: PaymentModalProps) {
     try {
       const { updateOrderFn } = await import("@/lib/api");
       await updateOrderFn({
-        data: { orderId: order.id, status: "paid", total: totals.total.toString() },
+        data: { orderId: order.id, status: "paid", total: totals.total.toString(), paymentMethodId: methodId },
       });
     } catch (e) {
       console.error("Failed to sync payment", e);
     }
 
     setTimeout(onClose, 1800);
+  };
+
+  const handlePrint = () => {
+    setShowInvoice(true);
+    setTimeout(() => {
+      window.print();
+      setShowInvoice(false);
+    }, 100);
   };
 
   if (paid) {
@@ -178,6 +190,68 @@ export function PaymentModal({ order, onClose }: PaymentModalProps) {
           </Button>
         </div>
       </div>
+
+      {showInvoice && (
+        <div className="fixed inset-0 z-50 hidden print:block bg-white p-6 overflow-auto text-black">
+          <div className="max-w-lg mx-auto">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <div className="text-2xl font-bold">Forno POS</div>
+                <div className="text-sm text-muted-foreground">Tax Invoice</div>
+              </div>
+              <div className="text-xs text-muted-foreground text-right">
+                {new Date().toLocaleString()}
+              </div>
+            </div>
+
+            <div className="mb-4 text-sm space-y-1">
+              <div className="font-medium">Order ID</div>
+              <div>{order.id}</div>
+            </div>
+
+            <div className="mb-4 text-sm space-y-1">
+              <div className="font-medium">Payment Method</div>
+              <div>{selectedMethod?.name ?? "N/A"}</div>
+            </div>
+
+            <div className="space-y-3 border-b pb-3 mb-3">
+              {order.items.map((item) => (
+                <div key={item.id} className="flex items-center justify-between text-sm gap-4">
+                  <div className="min-w-0">
+                    <div className="font-medium truncate">{item.name}</div>
+                    <div className="text-xs text-muted-foreground">{item.qty} × {fmtMoney(item.price)}</div>
+                  </div>
+                  <div className="font-semibold">{fmtMoney(item.price * item.qty)}</div>
+                </div>
+              ))}
+            </div>
+
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span>Subtotal</span>
+                <span>{fmtMoney(totals.subtotal)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Discount</span>
+                <span>{fmtMoney(totals.discount)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Tax ({order.taxPct}%)</span>
+                <span>{fmtMoney(totals.tax)}</span>
+              </div>
+              <div className="flex justify-between border-t pt-2 text-base font-semibold">
+                <span>Total</span>
+                <span>{fmtMoney(totals.total)}</span>
+              </div>
+            </div>
+
+            <div className="mt-6 text-xs text-muted-foreground">
+              <p>Thank you for dining with us.</p>
+              <p>Please collect the receipt after payment is completed.</p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

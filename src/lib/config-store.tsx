@@ -79,15 +79,34 @@ export interface DiscountType {
 
 export interface RestaurantConfig {
   name: string;
-  branch: string;
+  branch: string;              // Used as fallback or location name
   address: string;
   phone: string;
   email: string;
   gstNo: string;
   fssaiNo: string;
-  currency: string;        // "₹"
-  currencyCode: string;    // "INR"
-  locale: string;          // "en-IN"
+  currency: string;            // '₹' or '$'
+  currencyCode: string;        // 'INR' or 'USD'
+  locale: string;
+  website?: string;
+  whatsapp?: string;
+  logoUrl?: string;
+  receiptFooter?: string;
+  openTime?: string;
+  closeTime?: string;
+  weeklyOff?: string;
+}
+
+export interface Branch {
+  id: string;
+  name: string;
+  code: string;
+  address: string;
+  phone: string;
+  email: string;
+  gstNo: string;
+  active: boolean;
+  isMain: boolean;
 }
 
 export interface KDSConfig {
@@ -95,6 +114,10 @@ export interface KDSConfig {
   slaWarningMin: number;       // yellow threshold
   slaCriticalMin: number;      // red/pulse threshold
   autoAdvanceOnServe: boolean;
+  soundAlerts: boolean;        // play beep on new KOT
+  bumpScreenMode: boolean;     // full-screen bump-only display
+  showItemNotes: boolean;      // show special instructions inline
+  groupByStation: boolean;     // auto-group by kitchen station
 }
 
 export interface BillingConfig {
@@ -105,6 +128,13 @@ export interface BillingConfig {
   printReceiptOnPay: boolean;
   splitBillEnabled: boolean;
   autoKotPrint: boolean;
+  billPrefix: string;          // e.g. "INV-" → INV-0001
+  billStartNumber: number;     // starting bill number
+  minimumOrderValue: number;   // 0 = no minimum
+  loyaltyEnabled: boolean;     // master toggle for loyalty
+  showTaxBreakdown: boolean;   // show CGST/SGST split on receipt
+  allowVoidWithoutManager: boolean;
+  coverChargePerHead: number;  // dine-in cover charge ₹
 }
 
 export interface TakeawayConfig {
@@ -112,6 +142,12 @@ export interface TakeawayConfig {
   requirePhone: boolean;
   enableDelivery: boolean;
   defaultPrepTimeMins: number;
+  packagingCharge: number;   // flat ₹ per order
+  deliveryChargeFlatRate: number;
+  freeDeliveryAbove: number; // 0 = always charge
+  deliveryRadiusKm: number;  // 0 = unlimited
+  requireDeliveryAddress: boolean;
+  defaultOrderType: "dine-in" | "takeaway" | "delivery";
 }
 
 export interface ShiftConfig {
@@ -119,10 +155,46 @@ export interface ShiftConfig {
   cashCountOnOpen: boolean;
   cashCountOnClose: boolean;
   breakDurationMins: number;
+  maxShiftHours: number;       // alert after N hours (0 = off)
+  overtimeThresholdHours: number;
+  pettyCashLimit: number;      // max petty cash disbursement per shift
+  allowMultipleOpenShifts: boolean;
+  autoCloseShiftAfterHours: number; // 0 = never
+}
+
+export interface Printer {
+  id: string;
+  name: string;               // Display name
+  ipAddress: string;          // IP or USB path
+  port: number;               // 9100 default
+  type: "receipt" | "kot" | "both";
+  paperWidth: "58mm" | "80mm";
+  active: boolean;
+}
+
+export interface OnlineOrderChannel {
+  id: string;
+  name: string;               // "Zomato", "Swiggy", etc.
+  platformFeePercent: number; // commission % charged by platform
+  active: boolean;
+  autoAccept: boolean;        // auto-accept incoming orders
+  printerName: string;        // linked printer name
+}
+
+export interface LoyaltyConfig {
+  enabled: boolean;
+  pointsPerRupee: number;     // e.g. 1 point per ₹10 spent
+  rupeePerPoint: number;      // redemption: 1 point = ₹ value
+  minPointsToRedeem: number;  // minimum threshold
+  expiryDays: number;         // 0 = no expiry
+  earnOnDiscountedBills: boolean;
+  redeemOnDelivery: boolean;
 }
 
 export interface AppConfig {
   restaurant: RestaurantConfig;
+  branches: Branch[];
+  activeBranchId: string;
   categories: MenuCategory[];
   stations: KitchenStation[];
   tableSections: TableSection[];
@@ -130,10 +202,13 @@ export interface AppConfig {
   staffRoles: StaffRole[];
   taxSlabs: TaxSlab[];
   discountTypes: DiscountType[];
+  printers: Printer[];
+  onlineChannels: OnlineOrderChannel[];
   kds: KDSConfig;
   billing: BillingConfig;
   takeaway: TakeawayConfig;
   shift: ShiftConfig;
+  loyalty: LoyaltyConfig;
 }
 
 // ─── Default Configuration ─────────────────────────────────────
@@ -145,12 +220,33 @@ export const DEFAULT_CONFIG: AppConfig = {
     address: "123 Main Street, Mumbai 400001",
     phone: "+91 98765 43210",
     email: "orders@forno.in",
+    website: "https://forno.in",
+    whatsapp: "+91 98765 43210",
     gstNo: "27AAPFU0939F1ZV",
     fssaiNo: "11512325000491",
     currency: "₹",
     currencyCode: "INR",
     locale: "en-IN",
+    logoUrl: "",
+    receiptFooter: "Thank you for dining with us! Visit again soon.",
+    openTime: "09:00",
+    closeTime: "23:00",
+    weeklyOff: "Sunday",
   },
+  branches: [
+    {
+      id: "br-1",
+      name: "Main Branch",
+      code: "HQ",
+      address: "123 Main Street",
+      phone: "1234567890",
+      email: "hello@example.com",
+      gstNo: "",
+      active: true,
+      isMain: true,
+    }
+  ],
+  activeBranchId: "br-1",
   categories: [
     { id: "cat-1", name: "Starters",  color: "#f97316", active: true, sortOrder: 1 },
     { id: "cat-2", name: "Mains",     color: "#ef4444", active: true, sortOrder: 2 },
@@ -194,11 +290,23 @@ export const DEFAULT_CONFIG: AppConfig = {
     { id: "disc-3", name: "Manager Promo",   type: "percentage", maxValue: 30, requiresApproval: true,  active: true },
     { id: "disc-4", name: "Flat Discount",   type: "flat",       maxValue: 500, requiresApproval: true, active: true },
   ],
+  printers: [
+    { id: "ptr-1", name: "Bill Printer", ipAddress: "192.168.1.100", port: 9100, type: "receipt", paperWidth: "80mm", active: true },
+    { id: "ptr-2", name: "KOT Printer",  ipAddress: "192.168.1.101", port: 9100, type: "kot",     paperWidth: "80mm", active: true },
+  ],
+  onlineChannels: [
+    { id: "oc-1", name: "Zomato", platformFeePercent: 18, active: false, autoAccept: false, printerName: "KOT Printer" },
+    { id: "oc-2", name: "Swiggy", platformFeePercent: 22, active: false, autoAccept: false, printerName: "KOT Printer" },
+  ],
   kds: {
     refreshIntervalSec: 3,
     slaWarningMin: 10,
     slaCriticalMin: 20,
     autoAdvanceOnServe: false,
+    soundAlerts: true,
+    bumpScreenMode: false,
+    showItemNotes: true,
+    groupByStation: false,
   },
   billing: {
     defaultTaxPct: 18,
@@ -208,18 +316,45 @@ export const DEFAULT_CONFIG: AppConfig = {
     printReceiptOnPay: true,
     splitBillEnabled: true,
     autoKotPrint: false,
+    billPrefix: "INV-",
+    billStartNumber: 1,
+    minimumOrderValue: 0,
+    loyaltyEnabled: false,
+    showTaxBreakdown: true,
+    allowVoidWithoutManager: false,
+    coverChargePerHead: 0,
   },
   takeaway: {
     tokenMax: 99,
     requirePhone: false,
     enableDelivery: false,
     defaultPrepTimeMins: 20,
+    packagingCharge: 0,
+    deliveryChargeFlatRate: 40,
+    freeDeliveryAbove: 500,
+    deliveryRadiusKm: 0,
+    requireDeliveryAddress: true,
+    defaultOrderType: "dine-in",
   },
   shift: {
     requireOpenShift: true,
     cashCountOnOpen: true,
     cashCountOnClose: true,
     breakDurationMins: 30,
+    maxShiftHours: 12,
+    overtimeThresholdHours: 9,
+    pettyCashLimit: 500,
+    allowMultipleOpenShifts: false,
+    autoCloseShiftAfterHours: 0,
+  },
+  loyalty: {
+    enabled: false,
+    pointsPerRupee: 0.1,
+    rupeePerPoint: 0.25,
+    minPointsToRedeem: 100,
+    expiryDays: 365,
+    earnOnDiscountedBills: false,
+    redeemOnDelivery: false,
   },
 };
 
@@ -232,6 +367,7 @@ type ConfigAction =
   | { type: "SET_BILLING"; data: Partial<BillingConfig> }
   | { type: "SET_TAKEAWAY"; data: Partial<TakeawayConfig> }
   | { type: "SET_SHIFT"; data: Partial<ShiftConfig> }
+  | { type: "SET_LOYALTY"; data: Partial<LoyaltyConfig> }
   // Categories
   | { type: "ADD_CATEGORY"; item: MenuCategory }
   | { type: "UPDATE_CATEGORY"; item: MenuCategory }
@@ -258,10 +394,23 @@ type ConfigAction =
   | { type: "UPDATE_TAX_SLAB"; item: TaxSlab }
   | { type: "DELETE_TAX_SLAB"; id: string }
   | { type: "SET_DEFAULT_TAX"; id: string }
+  | { type: "ADD_BRANCH"; item: Branch }
+  | { type: "UPDATE_BRANCH"; item: Branch }
+  | { type: "DELETE_BRANCH"; id: string }
+  | { type: "SET_ACTIVE_BRANCH"; id: string }
+  | { type: "ADD_DISCOUNT"; item: DiscountType }
   // Discount Types
   | { type: "ADD_DISCOUNT_TYPE"; item: DiscountType }
   | { type: "UPDATE_DISCOUNT_TYPE"; item: DiscountType }
   | { type: "DELETE_DISCOUNT_TYPE"; id: string }
+  // Printers
+  | { type: "ADD_PRINTER"; item: Printer }
+  | { type: "UPDATE_PRINTER"; item: Printer }
+  | { type: "DELETE_PRINTER"; id: string }
+  // Online Channels
+  | { type: "ADD_ONLINE_CHANNEL"; item: OnlineOrderChannel }
+  | { type: "UPDATE_ONLINE_CHANNEL"; item: OnlineOrderChannel }
+  | { type: "DELETE_ONLINE_CHANNEL"; id: string }
   | { type: "RESET_CONFIG" };
 
 function configReducer(state: AppConfig, action: ConfigAction): AppConfig {
@@ -274,6 +423,7 @@ function configReducer(state: AppConfig, action: ConfigAction): AppConfig {
     case "SET_BILLING": return { ...state, billing: { ...state.billing, ...action.data } };
     case "SET_TAKEAWAY": return { ...state, takeaway: { ...state.takeaway, ...action.data } };
     case "SET_SHIFT": return { ...state, shift: { ...state.shift, ...action.data } };
+    case "SET_LOYALTY": return { ...state, loyalty: { ...state.loyalty, ...action.data } };
 
     // Categories
     case "ADD_CATEGORY": return { ...state, categories: [...state.categories, action.item] };
@@ -303,14 +453,31 @@ function configReducer(state: AppConfig, action: ConfigAction): AppConfig {
 
     // Tax Slabs
     case "ADD_TAX_SLAB": return { ...state, taxSlabs: [...state.taxSlabs, action.item] };
-    case "UPDATE_TAX_SLAB": return { ...state, taxSlabs: state.taxSlabs.map(t => t.id === action.item.id ? action.item : t) };
-    case "DELETE_TAX_SLAB": return { ...state, taxSlabs: state.taxSlabs.filter(t => t.id !== action.id) };
-    case "SET_DEFAULT_TAX": return { ...state, taxSlabs: state.taxSlabs.map(t => ({ ...t, isDefault: t.id === action.id })) };
+    case "UPDATE_TAX_SLAB": return { ...state, taxSlabs: state.taxSlabs.map((t) => (t.id === action.item.id ? action.item : t)) };
+    case "DELETE_TAX_SLAB": return { ...state, taxSlabs: state.taxSlabs.filter((t) => t.id !== action.id) };
+    case "SET_DEFAULT_TAX": return { ...state, taxSlabs: state.taxSlabs.map((t) => ({ ...t, isDefault: t.id === action.id })) };
+
+    case "ADD_BRANCH": return { ...state, branches: [...(state.branches || []), action.item] };
+    case "UPDATE_BRANCH": return { ...state, branches: (state.branches || []).map((b) => (b.id === action.item.id ? action.item : b)) };
+    case "DELETE_BRANCH": return { ...state, branches: (state.branches || []).filter((b) => b.id !== action.id) };
+    case "SET_ACTIVE_BRANCH": return { ...state, activeBranchId: action.id };
+
+    case "ADD_DISCOUNT": return { ...state, discountTypes: [...state.discountTypes, action.item] };
 
     // Discount Types
     case "ADD_DISCOUNT_TYPE": return { ...state, discountTypes: [...state.discountTypes, action.item] };
     case "UPDATE_DISCOUNT_TYPE": return { ...state, discountTypes: state.discountTypes.map(d => d.id === action.item.id ? action.item : d) };
     case "DELETE_DISCOUNT_TYPE": return { ...state, discountTypes: state.discountTypes.filter(d => d.id !== action.id) };
+
+    // Printers
+    case "ADD_PRINTER": return { ...state, printers: [...(state.printers ?? []), action.item] };
+    case "UPDATE_PRINTER": return { ...state, printers: (state.printers ?? []).map(p => p.id === action.item.id ? action.item : p) };
+    case "DELETE_PRINTER": return { ...state, printers: (state.printers ?? []).filter(p => p.id !== action.id) };
+
+    // Online Channels
+    case "ADD_ONLINE_CHANNEL": return { ...state, onlineChannels: [...(state.onlineChannels ?? []), action.item] };
+    case "UPDATE_ONLINE_CHANNEL": return { ...state, onlineChannels: (state.onlineChannels ?? []).map(c => c.id === action.item.id ? action.item : c) };
+    case "DELETE_ONLINE_CHANNEL": return { ...state, onlineChannels: (state.onlineChannels ?? []).filter(c => c.id !== action.id) };
 
     default: return state;
   }

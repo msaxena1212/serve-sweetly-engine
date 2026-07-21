@@ -4,6 +4,7 @@ import {
   useConfig, newConfigId, useSyncToDb,
   type MenuCategory, type KitchenStation, type TableSection,
   type PaymentMethod, type StaffRole, type TaxSlab, type DiscountType,
+  type Printer, type OnlineOrderChannel, type Branch,
 } from "@/lib/config-store";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,7 +15,8 @@ import {
   Settings2, Tag, ChefHat, LayoutGrid, CreditCard,
   Users, Percent, BadgePercent, Building2, MonitorSmartphone,
   ShoppingBag, Clock, Plus, Trash2, Pencil, Check, X,
-  GripVertical, AlertCircle, RefreshCcw,
+  GripVertical, AlertCircle, RefreshCcw, Printer as PrinterIcon,
+  Globe, Gift, Phone, Mail, MapPin, Link, AlarmClock, Wifi,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -34,18 +36,22 @@ export const Route = createFileRoute("/masters")({
 
 // ─── Tab Registry ──────────────────────────────────────────────
 const TABS = [
-  { id: "restaurant",   label: "Restaurant",      icon: Building2 },
-  { id: "categories",   label: "Categories",       icon: Tag },
-  { id: "stations",     label: "Kitchen Stations", icon: ChefHat },
-  { id: "sections",     label: "Table Sections",   icon: LayoutGrid },
-  { id: "payments",     label: "Payment Methods",  icon: CreditCard },
-  { id: "roles",        label: "Staff Roles",      icon: Users },
-  { id: "tax",          label: "Tax Slabs",         icon: Percent },
-  { id: "discounts",    label: "Discount Types",   icon: BadgePercent },
-  { id: "kds",          label: "KDS Config",        icon: MonitorSmartphone },
-  { id: "billing",      label: "Billing",           icon: ShoppingBag },
-  { id: "takeaway",     label: "Takeaway",          icon: ShoppingBag },
-  { id: "shift",        label: "Shift",             icon: Clock },
+  { id: "restaurant",   label: "Restaurant",        icon: Building2 },
+  { id: "branches",     label: "Branches",          icon: MapPin },
+  { id: "categories",   label: "Categories",         icon: Tag },
+  { id: "stations",     label: "Kitchen Stations",   icon: ChefHat },
+  { id: "sections",     label: "Table Sections",     icon: LayoutGrid },
+  { id: "payments",     label: "Payment Methods",    icon: CreditCard },
+  { id: "roles",        label: "Staff Roles",        icon: Users },
+  { id: "tax",          label: "Tax Slabs",           icon: Percent },
+  { id: "discounts",    label: "Discount Types",     icon: BadgePercent },
+  { id: "printers",     label: "Printers",           icon: PrinterIcon },
+  { id: "online",       label: "Online Channels",    icon: Globe },
+  { id: "loyalty",      label: "Loyalty Program",    icon: Gift },
+  { id: "kds",          label: "KDS Config",          icon: MonitorSmartphone },
+  { id: "billing",      label: "Billing",             icon: ShoppingBag },
+  { id: "takeaway",     label: "Takeaway",            icon: ShoppingBag },
+  { id: "shift",        label: "Shift",               icon: Clock },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
 
@@ -115,6 +121,7 @@ function MastersPage() {
         {/* Content Panel */}
         <main className="flex-1 overflow-y-auto p-6">
           {tab === "restaurant"   && <RestaurantTab />}
+          {tab === "branches"     && <BranchesTab />}
           {tab === "categories"   && <CategoriesTab />}
           {tab === "stations"     && <StationsTab />}
           {tab === "sections"     && <SectionsTab />}
@@ -122,6 +129,9 @@ function MastersPage() {
           {tab === "roles"        && <RolesTab />}
           {tab === "tax"          && <TaxTab />}
           {tab === "discounts"    && <DiscountsTab />}
+          {tab === "printers"     && <PrintersTab />}
+          {tab === "online"       && <OnlineChannelsTab />}
+          {tab === "loyalty"      && <LoyaltyTab />}
           {tab === "kds"          && <KDSTab />}
           {tab === "billing"      && <BillingTab />}
           {tab === "takeaway"     && <TakeawayTab />}
@@ -138,14 +148,20 @@ function RestaurantTab() {
   const [draft, setDraft] = useState(config.restaurant);
   const save = () => { dispatch({ type: "SET_RESTAURANT", data: draft }); toast.success("Restaurant info saved"); };
 
+  const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "None"];
+
   return (
     <TabShell title="Restaurant Information" subtitle="Business details printed on receipts and used throughout the app.">
+      {/* Identity */}
       <Card className="p-6">
-        <div className="grid md:grid-cols-2 gap-4 max-w-2xl">
+        <h3 className="text-sm font-semibold mb-4 flex items-center gap-2"><Building2 className="h-4 w-4 text-primary" /> Identity &amp; Contact</h3>
+        <div className="grid md:grid-cols-2 gap-4 max-w-3xl">
           <Field label="Restaurant Name" value={draft.name} onChange={v => setDraft(p => ({ ...p, name: v }))} />
           <Field label="Branch / Location" value={draft.branch} onChange={v => setDraft(p => ({ ...p, branch: v }))} />
           <Field label="Phone" value={draft.phone} onChange={v => setDraft(p => ({ ...p, phone: v }))} />
+          <Field label="WhatsApp Number" value={draft.whatsapp ?? ""} onChange={v => setDraft(p => ({ ...p, whatsapp: v }))} />
           <Field label="Email" value={draft.email} onChange={v => setDraft(p => ({ ...p, email: v }))} />
+          <Field label="Website" value={draft.website ?? ""} onChange={v => setDraft(p => ({ ...p, website: v }))} />
           <Field label="GST Number" value={draft.gstNo} onChange={v => setDraft(p => ({ ...p, gstNo: v }))} />
           <Field label="FSSAI License" value={draft.fssaiNo} onChange={v => setDraft(p => ({ ...p, fssaiNo: v }))} />
           <Field label="Currency Symbol" value={draft.currency} onChange={v => setDraft(p => ({ ...p, currency: v }))} className="w-28" />
@@ -153,9 +169,141 @@ function RestaurantTab() {
           <div className="md:col-span-2">
             <Field label="Address" value={draft.address} onChange={v => setDraft(p => ({ ...p, address: v }))} />
           </div>
+          <div className="md:col-span-2">
+            <Field label="Logo URL" value={draft.logoUrl ?? ""} onChange={v => setDraft(p => ({ ...p, logoUrl: v }))} />
+          </div>
         </div>
-        <Button className="mt-5" onClick={save}><Check className="h-4 w-4 mr-2" /> Save Info</Button>
       </Card>
+
+      {/* Business Hours */}
+      <Card className="p-6">
+        <h3 className="text-sm font-semibold mb-4 flex items-center gap-2"><AlarmClock className="h-4 w-4 text-primary" /> Business Hours</h3>
+        <div className="grid md:grid-cols-3 gap-4 max-w-xl">
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">Opening Time</label>
+            <input type="time" value={draft.openTime ?? "09:00"} onChange={e => setDraft(p => ({ ...p, openTime: e.target.value }))}
+              className="h-9 w-full rounded-md border bg-background px-3 text-sm" />
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">Closing Time</label>
+            <input type="time" value={draft.closeTime ?? "23:00"} onChange={e => setDraft(p => ({ ...p, closeTime: e.target.value }))}
+              className="h-9 w-full rounded-md border bg-background px-3 text-sm" />
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">Weekly Off</label>
+            <Select value={draft.weeklyOff ?? "Sunday"} onValueChange={v => setDraft(p => ({ ...p, weeklyOff: v }))}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>{DAYS.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+        </div>
+      </Card>
+
+      {/* Receipt Footer */}
+      <Card className="p-6">
+        <h3 className="text-sm font-semibold mb-4">Receipt Footer Message</h3>
+        <textarea
+          className="w-full max-w-lg rounded-md border bg-background px-3 py-2 text-sm resize-none min-h-[80px]"
+          placeholder="Printed at the bottom of every bill..."
+          value={draft.receiptFooter ?? ""}
+          onChange={e => setDraft(p => ({ ...p, receiptFooter: e.target.value }))}
+        />
+      </Card>
+
+      <Button onClick={save}><Check className="h-4 w-4 mr-2" /> Save Restaurant Info</Button>
+    </TabShell>
+  );
+}
+
+// ─── Branches ────────────────────────────────────────────────
+function BranchesTab() {
+  const { config, dispatch } = useConfig();
+  const [draft, setDraft] = useState<Omit<Branch, "id">>({ name: "", code: "", address: "", phone: "", email: "", gstNo: "", active: true, isMain: false });
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<Partial<Branch>>({});
+
+  const add = () => {
+    if (!draft.name.trim() || !draft.code.trim()) { toast.error("Name and Code required"); return; }
+    dispatch({ type: "ADD_BRANCH", item: { id: newConfigId("br"), ...draft } });
+    setDraft({ name: "", code: "", address: "", phone: "", email: "", gstNo: "", active: true, isMain: false });
+    toast.success("Branch added");
+  };
+
+  return (
+    <TabShell title="Branches" subtitle="Manage multi-branch locations. The active branch is used for receipts and current session context.">
+      <Card className="p-4 mb-4">
+        <h3 className="text-sm font-semibold mb-3">Add Branch</h3>
+        <div className="grid md:grid-cols-4 gap-3 items-end">
+          <div><label className="text-xs text-muted-foreground mb-1 block">Name</label><Input placeholder="e.g. South End" value={draft.name} onChange={e=>setDraft(p=>({...p,name:e.target.value}))} /></div>
+          <div><label className="text-xs text-muted-foreground mb-1 block">Code</label><Input placeholder="e.g. SE01" value={draft.code} onChange={e=>setDraft(p=>({...p,code:e.target.value}))} /></div>
+          <div><label className="text-xs text-muted-foreground mb-1 block">Phone</label><Input value={draft.phone} onChange={e=>setDraft(p=>({...p,phone:e.target.value}))} /></div>
+          <div><label className="text-xs text-muted-foreground mb-1 block">Email</label><Input value={draft.email} onChange={e=>setDraft(p=>({...p,email:e.target.value}))} /></div>
+          <div className="md:col-span-2"><label className="text-xs text-muted-foreground mb-1 block">Address</label><Input value={draft.address} onChange={e=>setDraft(p=>({...p,address:e.target.value}))} /></div>
+          <div><label className="text-xs text-muted-foreground mb-1 block">GST No</label><Input value={draft.gstNo} onChange={e=>setDraft(p=>({...p,gstNo:e.target.value}))} /></div>
+          <Button onClick={add}><Plus className="h-4 w-4 mr-1" /> Add</Button>
+        </div>
+      </Card>
+
+      <div className="space-y-3">
+        {(config.branches || []).map(b => {
+          const isActiveSessionBranch = config.activeBranchId === b.id;
+          return (
+            <Card key={b.id} className={cn("p-4", !b.active && "opacity-60", isActiveSessionBranch && "border-primary ring-1 ring-primary/20 bg-primary/5")}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1">
+                  <div className="font-semibold text-base flex items-center gap-2">
+                    <MapPin className="h-4 w-4 text-primary" />
+                    {editId === b.id ? <Input value={editDraft.name ?? b.name} onChange={e=>setEditDraft(d=>({...d,name:e.target.value}))} className="h-7 w-48 inline-block" /> : b.name}
+                    {!isActiveSessionBranch && (
+                      <Button size="sm" variant="outline" className="h-6 text-[10px] ml-2" onClick={()=>{dispatch({type:"SET_ACTIVE_BRANCH",id:b.id});toast.success(`Switched to ${b.name}`);}}>
+                        Set as Active Context
+                      </Button>
+                    )}
+                    {isActiveSessionBranch && <span className="text-[10px] bg-primary text-primary-foreground px-2 py-0.5 rounded-full font-bold uppercase tracking-wide">Active</span>}
+                  </div>
+                  
+                  {editId === b.id ? (
+                    <div className="mt-3 grid md:grid-cols-3 gap-2">
+                      <div><label className="text-[11px] text-muted-foreground block mb-0.5">Code</label><Input value={editDraft.code ?? b.code} onChange={e=>setEditDraft(d=>({...d,code:e.target.value}))} className="h-7 text-xs" /></div>
+                      <div><label className="text-[11px] text-muted-foreground block mb-0.5">Phone</label><Input value={editDraft.phone ?? b.phone} onChange={e=>setEditDraft(d=>({...d,phone:e.target.value}))} className="h-7 text-xs" /></div>
+                      <div><label className="text-[11px] text-muted-foreground block mb-0.5">Email</label><Input value={editDraft.email ?? b.email} onChange={e=>setEditDraft(d=>({...d,email:e.target.value}))} className="h-7 text-xs" /></div>
+                      <div className="md:col-span-2"><label className="text-[11px] text-muted-foreground block mb-0.5">Address</label><Input value={editDraft.address ?? b.address} onChange={e=>setEditDraft(d=>({...d,address:e.target.value}))} className="h-7 text-xs" /></div>
+                      <div><label className="text-[11px] text-muted-foreground block mb-0.5">GST No</label><Input value={editDraft.gstNo ?? b.gstNo} onChange={e=>setEditDraft(d=>({...d,gstNo:e.target.value}))} className="h-7 text-xs" /></div>
+                    </div>
+                  ) : (
+                    <div className="text-xs text-muted-foreground mt-1.5 flex flex-wrap gap-x-4 gap-y-1">
+                      <span>Code: <strong className="text-foreground">{b.code}</strong></span>
+                      {b.phone && <span>Phone: {b.phone}</span>}
+                      {b.email && <span>Email: {b.email}</span>}
+                      {b.gstNo && <span>GST: {b.gstNo}</span>}
+                      {b.address && <span className="w-full">Address: {b.address}</span>}
+                    </div>
+                  )}
+                </div>
+                <div className="flex flex-col items-end gap-2 shrink-0">
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs">Active</label>
+                    <Switch checked={b.active} onCheckedChange={v=>dispatch({type:"UPDATE_BRANCH",item:{...b,active:v}})} />
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {editId === b.id ? (
+                      <>
+                        <Button size="icon" variant="default" className="h-7 w-7" onClick={()=>{dispatch({type:"UPDATE_BRANCH",item:{...b,...editDraft}});setEditId(null);toast.success("Saved");}}><Check className="h-3.5 w-3.5" /></Button>
+                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={()=>setEditId(null)}><X className="h-3.5 w-3.5" /></Button>
+                      </>
+                    ) : (
+                      <>
+                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={()=>{setEditId(b.id);setEditDraft(b);}}><Pencil className="h-3.5 w-3.5" /></Button>
+                        <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={()=>{dispatch({type:"DELETE_BRANCH",id:b.id});toast.success("Removed");}}><Trash2 className="h-3.5 w-3.5" /></Button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </Card>
+          );
+        })}
+      </div>
     </TabShell>
   );
 }
@@ -567,17 +715,26 @@ function KDSTab() {
   const save = () => { dispatch({ type: "SET_KDS", data: draft }); toast.success("KDS config saved"); };
 
   return (
-    <TabShell title="Kitchen Display System" subtitle="SLA thresholds and display behaviour.">
+    <TabShell title="Kitchen Display System" subtitle="SLA thresholds, sound alerts and display behaviour.">
       <Card className="p-6 max-w-lg space-y-5">
+        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Polling &amp; SLA</h3>
         <NumberField label="Refresh Interval (seconds)" value={draft.refreshIntervalSec} onChange={v=>setDraft(p=>({...p,refreshIntervalSec:v}))} min={1} max={60} />
         <div className="grid grid-cols-2 gap-4">
           <NumberField label="⚠️ SLA Warning (minutes)" value={draft.slaWarningMin} onChange={v=>setDraft(p=>({...p,slaWarningMin:v}))} min={1} />
           <NumberField label="🔴 SLA Critical (minutes)" value={draft.slaCriticalMin} onChange={v=>setDraft(p=>({...p,slaCriticalMin:v}))} min={1} />
         </div>
-        <SwitchField label="Auto-advance ticket on Serve" value={draft.autoAdvanceOnServe} onChange={v=>setDraft(p=>({...p,autoAdvanceOnServe:v}))} />
         <div className="p-3 rounded-lg bg-muted/50 text-xs text-muted-foreground flex gap-2">
           <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
           Warning ({draft.slaWarningMin}m) = yellow, Critical ({draft.slaCriticalMin}m) = red + pulse.
+        </div>
+
+        <div className="border-t pt-4 space-y-3">
+          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Display &amp; Behaviour</h3>
+          <SwitchField label="Auto-advance ticket on Serve" value={draft.autoAdvanceOnServe} onChange={v=>setDraft(p=>({...p,autoAdvanceOnServe:v}))} />
+          <SwitchField label="🔊 Sound alert on new KOT" value={draft.soundAlerts ?? true} onChange={v=>setDraft(p=>({...p,soundAlerts:v}))} />
+          <SwitchField label="Bump-screen mode (full-screen touch)" value={draft.bumpScreenMode ?? false} onChange={v=>setDraft(p=>({...p,bumpScreenMode:v}))} />
+          <SwitchField label="Show item notes / special instructions" value={draft.showItemNotes ?? true} onChange={v=>setDraft(p=>({...p,showItemNotes:v}))} />
+          <SwitchField label="Group tickets by kitchen station" value={draft.groupByStation ?? false} onChange={v=>setDraft(p=>({...p,groupByStation:v}))} />
         </div>
         <Button onClick={save}><Check className="h-4 w-4 mr-2" /> Save KDS Config</Button>
       </Card>
@@ -592,18 +749,40 @@ function BillingTab() {
   const save = () => { dispatch({ type: "SET_BILLING", data: draft }); toast.success("Billing config saved"); };
 
   return (
-    <TabShell title="Billing Configuration" subtitle="Default tax, service charge, and feature toggles.">
-      <Card className="p-6 max-w-lg space-y-5">
+    <TabShell title="Billing Configuration" subtitle="Default tax, service charge, bill numbering and feature toggles.">
+      <Card className="p-6 max-w-xl space-y-5">
+        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Tax &amp; Charges</h3>
         <div className="grid grid-cols-2 gap-4">
           <NumberField label="Default Tax %" value={draft.defaultTaxPct} onChange={v=>setDraft(p=>({...p,defaultTaxPct:v}))} min={0} max={100} />
           <NumberField label="Service Charge %" value={draft.serviceChargePct} onChange={v=>setDraft(p=>({...p,serviceChargePct:v}))} min={0} max={100} />
         </div>
-        <NumberField label="Default Discount %" value={draft.defaultDiscountPct} onChange={v=>setDraft(p=>({...p,defaultDiscountPct:v}))} min={0} max={100} />
-        <div className="space-y-3 pt-1">
+        <div className="grid grid-cols-2 gap-4">
+          <NumberField label="Default Discount %" value={draft.defaultDiscountPct} onChange={v=>setDraft(p=>({...p,defaultDiscountPct:v}))} min={0} max={100} />
+          <NumberField label="Cover Charge per Head (₹)" value={draft.coverChargePerHead ?? 0} onChange={v=>setDraft(p=>({...p,coverChargePerHead:v}))} min={0} />
+        </div>
+        <NumberField label="Minimum Order Value (₹, 0 = no minimum)" value={draft.minimumOrderValue ?? 0} onChange={v=>setDraft(p=>({...p,minimumOrderValue:v}))} min={0} />
+
+        <div className="border-t pt-4">
+          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">Bill Numbering</h3>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Bill Prefix</label>
+              <Input placeholder="e.g. INV-" value={draft.billPrefix ?? ""} onChange={e=>setDraft(p=>({...p,billPrefix:e.target.value}))} />
+            </div>
+            <NumberField label="Start Number" value={draft.billStartNumber ?? 1} onChange={v=>setDraft(p=>({...p,billStartNumber:v}))} min={1} />
+          </div>
+          <p className="text-xs text-muted-foreground mt-1.5">Bills will be numbered: {draft.billPrefix ?? "INV-"}{String(draft.billStartNumber ?? 1).padStart(4, "0")}, {draft.billPrefix ?? "INV-"}{String((draft.billStartNumber ?? 1) + 1).padStart(4, "0")}…</p>
+        </div>
+
+        <div className="border-t pt-4 space-y-3">
+          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Feature Toggles</h3>
           <SwitchField label="Round off bill total" value={draft.roundOffBill} onChange={v=>setDraft(p=>({...p,roundOffBill:v}))} />
           <SwitchField label="Print receipt on payment" value={draft.printReceiptOnPay} onChange={v=>setDraft(p=>({...p,printReceiptOnPay:v}))} />
+          <SwitchField label="Show CGST / SGST breakdown on receipt" value={draft.showTaxBreakdown ?? true} onChange={v=>setDraft(p=>({...p,showTaxBreakdown:v}))} />
           <SwitchField label="Enable split bill" value={draft.splitBillEnabled} onChange={v=>setDraft(p=>({...p,splitBillEnabled:v}))} />
           <SwitchField label="Auto-print KOT on send" value={draft.autoKotPrint} onChange={v=>setDraft(p=>({...p,autoKotPrint:v}))} />
+          <SwitchField label="Allow void/cancel without manager PIN" value={draft.allowVoidWithoutManager ?? false} onChange={v=>setDraft(p=>({...p,allowVoidWithoutManager:v}))} />
+          <SwitchField label="Enable loyalty programme" value={draft.loyaltyEnabled ?? false} onChange={v=>setDraft(p=>({...p,loyaltyEnabled:v}))} />
         </div>
         <Button onClick={save}><Check className="h-4 w-4 mr-2" /> Save Billing Config</Button>
       </Card>
@@ -618,13 +797,42 @@ function TakeawayTab() {
   const save = () => { dispatch({ type: "SET_TAKEAWAY", data: draft }); toast.success("Takeaway config saved"); };
 
   return (
-    <TabShell title="Takeaway Configuration" subtitle="Queue tokens, delivery and prep time defaults.">
-      <Card className="p-6 max-w-lg space-y-5">
-        <NumberField label="Token Number Range (1–N)" value={draft.tokenMax} onChange={v=>setDraft(p=>({...p,tokenMax:v}))} min={10} max={9999} />
-        <NumberField label="Default Prep Time (minutes)" value={draft.defaultPrepTimeMins} onChange={v=>setDraft(p=>({...p,defaultPrepTimeMins:v}))} min={1} max={120} />
-        <div className="space-y-3 pt-1">
-          <SwitchField label="Require phone number" value={draft.requirePhone} onChange={v=>setDraft(p=>({...p,requirePhone:v}))} />
+    <TabShell title="Takeaway &amp; Delivery" subtitle="Queue tokens, prep time, delivery charges and defaults.">
+      <Card className="p-6 max-w-xl space-y-5">
+        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Defaults</h3>
+        <div className="grid grid-cols-2 gap-4">
+          <NumberField label="Token Number Range (1–N)" value={draft.tokenMax} onChange={v=>setDraft(p=>({...p,tokenMax:v}))} min={10} max={9999} />
+          <NumberField label="Default Prep Time (minutes)" value={draft.defaultPrepTimeMins} onChange={v=>setDraft(p=>({...p,defaultPrepTimeMins:v}))} min={1} max={120} />
+        </div>
+        <div>
+          <label className="text-xs text-muted-foreground mb-1 block">Default Order Type</label>
+          <Select value={draft.defaultOrderType ?? "dine-in"} onValueChange={v=>setDraft(p=>({...p,defaultOrderType:v as any}))}>
+            <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="dine-in">Dine-In</SelectItem>
+              <SelectItem value="takeaway">Takeaway</SelectItem>
+              <SelectItem value="delivery">Delivery</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="border-t pt-4">
+          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">Charges</h3>
+          <div className="grid grid-cols-2 gap-4">
+            <NumberField label="Packaging Charge (₹/order)" value={draft.packagingCharge ?? 0} onChange={v=>setDraft(p=>({...p,packagingCharge:v}))} min={0} />
+            <NumberField label="Delivery Charge (₹ flat)" value={draft.deliveryChargeFlatRate ?? 40} onChange={v=>setDraft(p=>({...p,deliveryChargeFlatRate:v}))} min={0} />
+          </div>
+          <div className="grid grid-cols-2 gap-4 mt-4">
+            <NumberField label="Free Delivery Above (₹, 0=always charge)" value={draft.freeDeliveryAbove ?? 500} onChange={v=>setDraft(p=>({...p,freeDeliveryAbove:v}))} min={0} />
+            <NumberField label="Delivery Radius (km, 0=unlimited)" value={draft.deliveryRadiusKm ?? 0} onChange={v=>setDraft(p=>({...p,deliveryRadiusKm:v}))} min={0} />
+          </div>
+        </div>
+
+        <div className="border-t pt-4 space-y-3">
+          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Toggles</h3>
+          <SwitchField label="Require customer phone number" value={draft.requirePhone} onChange={v=>setDraft(p=>({...p,requirePhone:v}))} />
           <SwitchField label="Enable delivery orders" value={draft.enableDelivery} onChange={v=>setDraft(p=>({...p,enableDelivery:v}))} />
+          <SwitchField label="Require delivery address" value={draft.requireDeliveryAddress ?? true} onChange={v=>setDraft(p=>({...p,requireDeliveryAddress:v}))} />
         </div>
         <Button onClick={save}><Check className="h-4 w-4 mr-2" /> Save Takeaway Config</Button>
       </Card>
@@ -639,15 +847,243 @@ function ShiftTab() {
   const save = () => { dispatch({ type: "SET_SHIFT", data: draft }); toast.success("Shift config saved"); };
 
   return (
-    <TabShell title="Shift Configuration" subtitle="Opening and closing procedures for cashier shifts.">
-      <Card className="p-6 max-w-lg space-y-5">
-        <NumberField label="Break Duration (minutes)" value={draft.breakDurationMins} onChange={v=>setDraft(p=>({...p,breakDurationMins:v}))} min={0} max={120} />
-        <div className="space-y-3 pt-1">
+    <TabShell title="Shift Configuration" subtitle="Opening and closing procedures, overtime thresholds and petty cash limits.">
+      <Card className="p-6 max-w-xl space-y-5">
+        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Timing</h3>
+        <div className="grid grid-cols-2 gap-4">
+          <NumberField label="Break Duration (minutes)" value={draft.breakDurationMins} onChange={v=>setDraft(p=>({...p,breakDurationMins:v}))} min={0} max={120} />
+          <NumberField label="Max Shift Length (hours, 0=off)" value={draft.maxShiftHours ?? 12} onChange={v=>setDraft(p=>({...p,maxShiftHours:v}))} min={0} max={24} />
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <NumberField label="Overtime Threshold (hours)" value={draft.overtimeThresholdHours ?? 9} onChange={v=>setDraft(p=>({...p,overtimeThresholdHours:v}))} min={0} max={24} />
+          <NumberField label="Auto-close After (hours, 0=never)" value={draft.autoCloseShiftAfterHours ?? 0} onChange={v=>setDraft(p=>({...p,autoCloseShiftAfterHours:v}))} min={0} max={48} />
+        </div>
+        <NumberField label="Petty Cash Limit per Shift (₹)" value={draft.pettyCashLimit ?? 500} onChange={v=>setDraft(p=>({...p,pettyCashLimit:v}))} min={0} />
+
+        <div className="border-t pt-4 space-y-3">
+          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Procedures</h3>
           <SwitchField label="Require shift to be opened before billing" value={draft.requireOpenShift} onChange={v=>setDraft(p=>({...p,requireOpenShift:v}))} />
           <SwitchField label="Cash count on shift open" value={draft.cashCountOnOpen} onChange={v=>setDraft(p=>({...p,cashCountOnOpen:v}))} />
           <SwitchField label="Cash count on shift close" value={draft.cashCountOnClose} onChange={v=>setDraft(p=>({...p,cashCountOnClose:v}))} />
+          <SwitchField label="Allow multiple shifts open simultaneously" value={draft.allowMultipleOpenShifts ?? false} onChange={v=>setDraft(p=>({...p,allowMultipleOpenShifts:v}))} />
         </div>
         <Button onClick={save}><Check className="h-4 w-4 mr-2" /> Save Shift Config</Button>
+      </Card>
+    </TabShell>
+  );
+}
+
+// ─── Printers ─────────────────────────────────────────────────
+function PrintersTab() {
+  const { config, dispatch } = useConfig();
+  const [draft, setDraft] = useState<Omit<Printer, "id">>({ name: "", ipAddress: "", port: 9100, type: "receipt", paperWidth: "80mm", active: true });
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<Partial<Printer>>({});
+
+  const add = () => {
+    if (!draft.name.trim()) { toast.error("Printer name required"); return; }
+    dispatch({ type: "ADD_PRINTER", item: { id: newConfigId("ptr"), ...draft } });
+    setDraft({ name: "", ipAddress: "", port: 9100, type: "receipt", paperWidth: "80mm", active: true });
+    toast.success("Printer added");
+  };
+
+  const typeColors: Record<string, string> = {
+    receipt: "bg-blue-500/10 text-blue-700",
+    kot: "bg-orange-500/10 text-orange-700",
+    both: "bg-purple-500/10 text-purple-700",
+  };
+
+  return (
+    <TabShell title="Printers" subtitle="Configure network or USB printers for receipts and KOT slips.">
+      <Card className="p-4 mb-4">
+        <h3 className="text-sm font-semibold mb-3">Add Printer</h3>
+        <div className="flex flex-wrap gap-2 items-end">
+          <div><label className="text-xs text-muted-foreground mb-1 block">Name</label><Input placeholder="e.g. Counter Printer" value={draft.name} onChange={e=>setDraft(p=>({...p,name:e.target.value}))} className="w-40" /></div>
+          <div><label className="text-xs text-muted-foreground mb-1 block">IP Address</label><Input placeholder="192.168.1.100" value={draft.ipAddress} onChange={e=>setDraft(p=>({...p,ipAddress:e.target.value}))} className="w-36" /></div>
+          <div><label className="text-xs text-muted-foreground mb-1 block">Port</label><Input type="number" value={draft.port} onChange={e=>setDraft(p=>({...p,port:Number(e.target.value)}))} className="w-20" /></div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">Type</label>
+            <Select value={draft.type} onValueChange={v=>setDraft(p=>({...p,type:v as any}))}>
+              <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
+              <SelectContent><SelectItem value="receipt">Receipt</SelectItem><SelectItem value="kot">KOT</SelectItem><SelectItem value="both">Both</SelectItem></SelectContent>
+            </Select>
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">Paper</label>
+            <Select value={draft.paperWidth} onValueChange={v=>setDraft(p=>({...p,paperWidth:v as any}))}>
+              <SelectTrigger className="w-20"><SelectValue /></SelectTrigger>
+              <SelectContent><SelectItem value="58mm">58 mm</SelectItem><SelectItem value="80mm">80 mm</SelectItem></SelectContent>
+            </Select>
+          </div>
+          <Button onClick={add}><Plus className="h-4 w-4 mr-1" /> Add</Button>
+        </div>
+      </Card>
+
+      <Card className="overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-muted/40 text-xs uppercase text-muted-foreground">
+            <tr>
+              <th className="text-left px-4 py-2.5">Name</th>
+              <th className="text-left px-4 py-2.5">IP / Port</th>
+              <th className="text-center px-4 py-2.5">Type</th>
+              <th className="text-center px-4 py-2.5">Paper</th>
+              <th className="text-center px-4 py-2.5">Active</th>
+              <th className="text-center px-4 py-2.5">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(config.printers ?? []).map(p => (
+              <tr key={p.id} className="border-t hover:bg-muted/20">
+                <td className="px-4 py-2 font-medium">
+                  {editId === p.id ? <Input value={editDraft.name ?? p.name} onChange={e=>setEditDraft(d=>({...d,name:e.target.value}))} className="h-7 w-32" /> : p.name}
+                </td>
+                <td className="px-4 py-2 text-muted-foreground text-xs">
+                  {editId === p.id
+                    ? <div className="flex gap-1"><Input value={editDraft.ipAddress ?? p.ipAddress} onChange={e=>setEditDraft(d=>({...d,ipAddress:e.target.value}))} className="h-7 w-28" /><Input type="number" value={editDraft.port ?? p.port} onChange={e=>setEditDraft(d=>({...d,port:Number(e.target.value)}))} className="h-7 w-16" /></div>
+                    : <>{p.ipAddress}:{p.port}</>}
+                </td>
+                <td className="px-4 py-2 text-center">
+                  <span className={cn("text-[10px] px-2 py-0.5 rounded-full font-semibold capitalize", typeColors[p.type])}>{p.type}</span>
+                </td>
+                <td className="px-4 py-2 text-center text-muted-foreground text-xs">{p.paperWidth}</td>
+                <td className="px-4 py-2 text-center"><Switch checked={p.active} onCheckedChange={v=>dispatch({type:"UPDATE_PRINTER",item:{...p,active:v}})} /></td>
+                <td className="px-4 py-2 text-center">
+                  <ActionButtons editId={editId} id={p.id}
+                    onEdit={()=>{setEditId(p.id);setEditDraft(p);}}
+                    onSave={()=>{dispatch({type:"UPDATE_PRINTER",item:{...p,...editDraft}});setEditId(null);toast.success("Saved");}}
+                    onCancel={()=>setEditId(null)}
+                    onDelete={()=>{dispatch({type:"DELETE_PRINTER",id:p.id});toast.success("Deleted");}}
+                  />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </Card>
+    </TabShell>
+  );
+}
+
+// ─── Online Order Channels ─────────────────────────────────────
+function OnlineChannelsTab() {
+  const { config, dispatch } = useConfig();
+  const [draft, setDraft] = useState<Omit<OnlineOrderChannel, "id">>({ name: "", platformFeePercent: 0, active: false, autoAccept: false, printerName: "" });
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<Partial<OnlineOrderChannel>>({});
+
+  const add = () => {
+    if (!draft.name.trim()) { toast.error("Channel name required"); return; }
+    dispatch({ type: "ADD_ONLINE_CHANNEL", item: { id: newConfigId("oc"), ...draft } });
+    setDraft({ name: "", platformFeePercent: 0, active: false, autoAccept: false, printerName: "" });
+    toast.success("Channel added");
+  };
+
+  return (
+    <TabShell title="Online Order Channels" subtitle="Manage third-party delivery platforms and their commission rates.">
+      <Card className="p-4 mb-4">
+        <h3 className="text-sm font-semibold mb-3">Add Channel</h3>
+        <div className="flex flex-wrap gap-2 items-end">
+          <div><label className="text-xs text-muted-foreground mb-1 block">Platform Name</label><Input placeholder="e.g. Zomato" value={draft.name} onChange={e=>setDraft(p=>({...p,name:e.target.value}))} className="w-36" /></div>
+          <div><label className="text-xs text-muted-foreground mb-1 block">Commission %</label><Input type="number" min={0} max={100} value={draft.platformFeePercent} onChange={e=>setDraft(p=>({...p,platformFeePercent:Number(e.target.value)}))} className="w-24" /></div>
+          <div><label className="text-xs text-muted-foreground mb-1 block">Linked Printer</label><Input placeholder="Printer name" value={draft.printerName} onChange={e=>setDraft(p=>({...p,printerName:e.target.value}))} className="w-36" /></div>
+          <div className="flex items-center gap-2 self-end pb-1"><Switch checked={draft.autoAccept} onCheckedChange={v=>setDraft(p=>({...p,autoAccept:v}))} /><label className="text-sm">Auto-accept</label></div>
+          <Button onClick={add}><Plus className="h-4 w-4 mr-1" /> Add</Button>
+        </div>
+      </Card>
+
+      <div className="grid md:grid-cols-2 gap-3">
+        {(config.onlineChannels ?? []).map(ch => (
+          <Card key={ch.id} className={cn("p-4", !ch.active && "opacity-55")}>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="font-semibold text-base flex items-center gap-2">
+                  <Wifi className="h-4 w-4 text-primary" />{ch.name}
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  Commission: <strong>{ch.platformFeePercent}%</strong> · Printer: <code className="bg-muted px-1 rounded">{ch.printerName || "—"}</code>
+                </div>
+                {ch.autoAccept && <span className="text-[10px] bg-green-500/10 text-green-700 px-2 py-0.5 rounded-full font-semibold mt-1.5 inline-block">Auto-accept ON</span>}
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <Switch checked={ch.active} onCheckedChange={v=>dispatch({type:"UPDATE_ONLINE_CHANNEL",item:{...ch,active:v}})} />
+                {editId === ch.id ? (
+                  <>
+                    <Button size="icon" variant="default" className="h-7 w-7" onClick={()=>{dispatch({type:"UPDATE_ONLINE_CHANNEL",item:{...ch,...editDraft}});setEditId(null);toast.success("Saved");}}><Check className="h-3.5 w-3.5" /></Button>
+                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={()=>setEditId(null)}><X className="h-3.5 w-3.5" /></Button>
+                  </>
+                ) : (
+                  <>
+                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={()=>{setEditId(ch.id);setEditDraft(ch);}}><Pencil className="h-3.5 w-3.5" /></Button>
+                    <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={()=>{dispatch({type:"DELETE_ONLINE_CHANNEL",id:ch.id});toast.success("Removed");}}><Trash2 className="h-3.5 w-3.5" /></Button>
+                  </>
+                )}
+              </div>
+            </div>
+            {editId === ch.id && (
+              <div className="mt-3 pt-3 border-t grid grid-cols-2 gap-2">
+                <div><label className="text-[11px] text-muted-foreground block mb-0.5">Platform Name</label><Input value={editDraft.name ?? ch.name} onChange={e=>setEditDraft(d=>({...d,name:e.target.value}))} className="h-7 text-xs" /></div>
+                <div><label className="text-[11px] text-muted-foreground block mb-0.5">Commission %</label><Input type="number" value={editDraft.platformFeePercent ?? ch.platformFeePercent} onChange={e=>setEditDraft(d=>({...d,platformFeePercent:Number(e.target.value)}))} className="h-7 text-xs" /></div>
+                <div><label className="text-[11px] text-muted-foreground block mb-0.5">Printer Name</label><Input value={editDraft.printerName ?? ch.printerName} onChange={e=>setEditDraft(d=>({...d,printerName:e.target.value}))} className="h-7 text-xs" /></div>
+                <div className="flex items-center gap-2 pt-3"><Switch checked={editDraft.autoAccept ?? ch.autoAccept} onCheckedChange={v=>setEditDraft(d=>({...d,autoAccept:v}))} /><label className="text-xs">Auto-accept</label></div>
+              </div>
+            )}
+          </Card>
+        ))}
+      </div>
+    </TabShell>
+  );
+}
+
+// ─── Loyalty Program ───────────────────────────────────────────
+function LoyaltyTab() {
+  const { config, dispatch } = useConfig();
+  const [draft, setDraft] = useState(config.loyalty ?? {
+    enabled: false, pointsPerRupee: 0.1, rupeePerPoint: 0.25,
+    minPointsToRedeem: 100, expiryDays: 365,
+    earnOnDiscountedBills: false, redeemOnDelivery: false,
+  });
+  const save = () => { dispatch({ type: "SET_LOYALTY", data: draft }); toast.success("Loyalty config saved"); };
+
+  const exampleSpend = 1000;
+  const earned = Math.floor(exampleSpend * (draft.pointsPerRupee ?? 0.1));
+  const worth = (earned * (draft.rupeePerPoint ?? 0.25)).toFixed(2);
+
+  return (
+    <TabShell title="Loyalty Programme" subtitle="Reward customers with points earned on every bill.">
+      <Card className="p-6 max-w-xl space-y-5">
+        <SwitchField label="Enable Loyalty Programme" value={draft.enabled ?? false} onChange={v=>setDraft(p=>({...p,enabled:v}))} />
+
+        <div className={cn("space-y-5", !draft.enabled && "opacity-40 pointer-events-none")}>
+          <div className="border-t pt-4">
+            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">Earning Rules</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <NumberField label="Points earned per ₹1 spent" value={draft.pointsPerRupee ?? 0.1} onChange={v=>setDraft(p=>({...p,pointsPerRupee:v}))} min={0} />
+              <NumberField label="Points expiry (days, 0=never)" value={draft.expiryDays ?? 365} onChange={v=>setDraft(p=>({...p,expiryDays:v}))} min={0} />
+            </div>
+            <SwitchField label="Earn points on discounted bills" value={draft.earnOnDiscountedBills ?? false} onChange={v=>setDraft(p=>({...p,earnOnDiscountedBills:v}))} />
+          </div>
+
+          <div className="border-t pt-4">
+            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">Redemption Rules</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <NumberField label="₹ value per point redeemed" value={draft.rupeePerPoint ?? 0.25} onChange={v=>setDraft(p=>({...p,rupeePerPoint:v}))} min={0} />
+              <NumberField label="Minimum points to redeem" value={draft.minPointsToRedeem ?? 100} onChange={v=>setDraft(p=>({...p,minPointsToRedeem:v}))} min={0} />
+            </div>
+            <SwitchField label="Allow redemption on delivery orders" value={draft.redeemOnDelivery ?? false} onChange={v=>setDraft(p=>({...p,redeemOnDelivery:v}))} />
+          </div>
+
+          {/* Live Preview */}
+          <div className="p-4 rounded-lg bg-primary/5 border border-primary/20">
+            <p className="text-xs font-semibold text-primary mb-2">💡 Example Simulation</p>
+            <p className="text-sm text-muted-foreground">
+              Customer spends <strong>₹{exampleSpend}</strong> → earns <strong>{earned} pts</strong> → worth <strong>₹{worth}</strong> off next bill.
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Min to redeem: <strong>{draft.minPointsToRedeem} pts</strong> · {earned >= (draft.minPointsToRedeem ?? 100) ? "✅ Eligible" : "❌ Not eligible yet"}
+            </p>
+          </div>
+        </div>
+        <Button onClick={save}><Check className="h-4 w-4 mr-2" /> Save Loyalty Config</Button>
       </Card>
     </TabShell>
   );

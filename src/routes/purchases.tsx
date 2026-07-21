@@ -17,6 +17,7 @@ import {
   getPurchaseOrdersFn, createPurchaseOrderFn, receivePurchaseOrderFn,
   getInventoryItemsFn,
 } from "@/lib/api";
+import { useConfig } from "@/lib/config-store";
 
 export const Route = createFileRoute("/purchases")({
   beforeLoad: ({ context }) => {
@@ -43,9 +44,12 @@ export const Route = createFileRoute("/purchases")({
 // ─── Types ───────────────────────────────────────────────────
 interface Supplier { id: string; name: string; contactInfo: string; }
 interface POItem { inventoryId: string; name: string; qty: number; unitPrice: number; unit: string; }
+interface PurchaseOrder { id: string; supplierId: string; supplierName: string; status: string; totalAmount: number; createdAt: number; items: POItem[]; }
 
 function PurchasesPage() {
   const loaderData = Route.useLoaderData();
+  const { config } = useConfig();
+  const branchId = config.activeBranchId;
   const [tab, setTab] = useState<"suppliers" | "orders">("suppliers");
   const [suppliers, setSuppliers] = useState<Supplier[]>(loaderData.suppliers);
   const [purchaseOrders, setPurchaseOrders] = useState(loaderData.purchaseOrders);
@@ -119,8 +123,8 @@ function PurchasesPage() {
 
     setLoading(true);
     try {
-      await createPurchaseOrderFn({ data: { supplierId: newPO.supplierId, items: newPO.items.map(i => ({ inventoryId: i.inventoryId, qty: i.qty, unitPrice: i.unitPrice })) } });
-      const updated = await getPurchaseOrdersFn();
+      await createPurchaseOrderFn({ data: { supplierId: newPO.supplierId, branchId, items: newPO.items.map(i => ({ inventoryId: i.inventoryId, qty: i.qty, unitPrice: i.unitPrice })) } });
+      const updated = await getPurchaseOrdersFn({ data: { branchId } });
       setPurchaseOrders(updated);
       setShowNewPO(false);
       setNewPO({ supplierId: "", items: [] });
@@ -135,8 +139,8 @@ function PurchasesPage() {
   const receiveOrder = async (po: typeof purchaseOrders[0]) => {
     setLoading(true);
     try {
-      await receivePurchaseOrderFn({ data: { poId: po.id, items: [] } }); // items tracked at PO level
-      const updated = await getPurchaseOrdersFn();
+      await receivePurchaseOrderFn({ data: { poId: po.id, items: [] } });
+      const updated = await getPurchaseOrdersFn({ data: { branchId } });
       setPurchaseOrders(updated);
       toast.success("Purchase order received — inventory updated.");
     } catch (e: any) {
@@ -252,6 +256,33 @@ function PurchasesPage() {
                     </span>
                   </div>
                 </div>
+
+                {po.items && po.items.length > 0 ? (
+                  <div className="overflow-x-auto mb-3">
+                    <table className="w-full text-sm">
+                      <thead className="text-xs uppercase text-muted-foreground border-b">
+                        <tr>
+                          <th className="text-left py-2">Item</th>
+                          <th className="text-center py-2">Qty</th>
+                          <th className="text-right py-2">Unit Price</th>
+                          <th className="text-right py-2">Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {po.items.map(item => (
+                          <tr key={item.inventoryId} className="border-t">
+                            <td className="py-2 font-medium">{item.name} <span className="text-muted-foreground text-xs">({item.unit})</span></td>
+                            <td className="py-2 text-center">{item.qty}</td>
+                            <td className="py-2 text-right text-muted-foreground">₹{item.unitPrice.toFixed(2)}</td>
+                            <td className="py-2 text-right font-semibold">₹{(item.qty * item.unitPrice).toFixed(2)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground mb-3">No items recorded for this order.</p>
+                )}
 
                 {po.status === "pending" && (
                   <Button size="sm" className="w-full" onClick={() => receiveOrder(po)} disabled={loading}>

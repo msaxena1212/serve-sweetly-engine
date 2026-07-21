@@ -257,8 +257,8 @@ function PosPage() {
                       return (
                         <div key={t.id} className="relative group">
                           <button
-                            onClick={() => {
-                              openOrderForTable(t.id);
+                            onClick={async () => {
+                              await openOrderForTable(t.id);
                               setSelectedTable(t.id);
                             }}
                             className={cn(

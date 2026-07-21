@@ -17,6 +17,7 @@ export const categories = pgTable('categories', {
 
 export const tableSections = pgTable('table_sections', {
   id: serial('id').primaryKey(),
+  branchId: text('branch_id').default('br-1').notNull(),
   name: text('name').notNull(),
   prefix: text('prefix').notNull(),
   active: boolean('active').default(true).notNull(),
@@ -63,6 +64,7 @@ export const menuItems = pgTable('menu_items', {
 
 export const tables = pgTable('tables', {
   id: serial('id').primaryKey(),
+  branchId: text('branch_id').default('br-1').notNull(),
   number: text('number').notNull(),
   sectionId: integer('section_id').references(() => tableSections.id),
   status: text('status').default('available').notNull(), // 'available', 'occupied'
@@ -81,6 +83,7 @@ export const orders = pgTable('orders', {
   taxPct: decimal('tax_pct', { precision: 5, scale: 2 }).default('0.00').notNull(),
   paymentMethodId: integer('payment_method_id').references(() => paymentMethods.id),
   shiftId: integer('shift_id'), // Will be FK to shifts
+  branchId: text('branch_id'), // links to config store branch id
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
@@ -96,6 +99,7 @@ export const orderItems = pgTable('order_items', {
 
 export const inventory = pgTable('inventory', {
   id: serial('id').primaryKey(),
+  branchId: text('branch_id').default('br-1').notNull(),
   name: text('name').notNull(),
   unit: text('unit').notNull(), // 'kg', 'liter', 'piece'
   quantity: decimal('quantity', { precision: 10, scale: 3 }).default('0.000').notNull(),
@@ -112,14 +116,25 @@ export const suppliers = pgTable('suppliers', {
 
 export const purchaseOrders = pgTable('purchase_orders', {
   id: serial('id').primaryKey(),
+  branchId: text('branch_id').default('br-1').notNull(),
   supplierId: integer('supplier_id').references(() => suppliers.id).notNull(),
   status: text('status').default('pending').notNull(), // 'pending', 'received', 'cancelled'
   totalAmount: decimal('total_amount', { precision: 10, scale: 2 }).default('0.00').notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
+export const purchaseOrderItems = pgTable('purchase_order_items', {
+  id: serial('id').primaryKey(),
+  purchaseOrderId: integer('purchase_order_id').references(() => purchaseOrders.id).notNull(),
+  inventoryId: integer('inventory_id').references(() => inventory.id).notNull(),
+  quantity: decimal('quantity', { precision: 10, scale: 3 }).notNull(),
+  unitPrice: decimal('unit_price', { precision: 10, scale: 2 }).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
 export const shifts = pgTable('shifts', {
   id: serial('id').primaryKey(),
+  branchId: text('branch_id').default('br-1').notNull(),
   openedBy: integer('opened_by').references(() => users.id).notNull(),
   closedBy: integer('closed_by').references(() => users.id),
   openingCash: decimal('opening_cash', { precision: 10, scale: 2 }).notNull(),
@@ -137,5 +152,23 @@ export const refunds = pgTable('refunds', {
   amount: decimal('amount', { precision: 10, scale: 2 }).notNull(),
   reason: text('reason').notNull(),
   approvedBy: integer('approved_by').references(() => users.id).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const recipeBom = pgTable('recipe_bom', {
+  id: serial('id').primaryKey(),
+  menuItemId: integer('menu_item_id').references(() => menuItems.id).notNull(),
+  inventoryId: integer('inventory_id').references(() => inventory.id).notNull(),
+  quantity: decimal('quantity', { precision: 10, scale: 3 }).notNull(), // Amount of inventory used per 1 quantity of menu item
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const inventoryLedger = pgTable('inventory_ledger', {
+  id: serial('id').primaryKey(),
+  inventoryId: integer('inventory_id').references(() => inventory.id).notNull(),
+  transactionType: text('transaction_type').notNull(), // 'PURCHASE', 'SALE_CONSUMPTION', 'ADJUSTMENT'
+  referenceId: text('reference_id'), // Order ID, Purchase Order ID, etc.
+  quantityChange: decimal('quantity_change', { precision: 10, scale: 3 }).notNull(), // Positive for in, negative for out
+  runningBalance: decimal('running_balance', { precision: 10, scale: 3 }).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });

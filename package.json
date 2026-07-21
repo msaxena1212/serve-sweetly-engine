@@ -8,6 +8,11 @@
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
+    "migrate": "node migrate.mjs",
+    "migrate:phase6": "node migrate-phase6.mjs",
+    "seed:tables": "node seed-tables.mjs",
+    "seed:menu": "node seed-menu.mjs",
+    "setup": "npm install && npm run migrate && npm run seed:tables && npm run seed:menu",
     "lint": "eslint .",
     "format": "prettier --write ."
   },

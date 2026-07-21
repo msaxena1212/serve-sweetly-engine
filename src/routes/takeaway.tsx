@@ -55,7 +55,7 @@ function TakeawayPage() {
   const { config } = useConfig();
   const active = selectedId ? open.find((o) => o.id === selectedId) : null;
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     // Validate — both Name and Phone are mandatory
     let valid = true;
     if (!name.trim()) {
@@ -80,7 +80,7 @@ function TakeawayPage() {
     }
 
     const token = getNextToken(config.takeaway.tokenMax);
-    const order = openTakeawayOrder(name.trim()) as any;
+    const order = await openTakeawayOrder(name.trim()) as any;
     (order as any).__token = token;
     (order as any).__phone = phone.trim();
     setSelectedId(order.id);
