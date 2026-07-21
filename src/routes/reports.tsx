@@ -27,6 +27,9 @@ export const Route = createFileRoute("/reports")({
     if (!context.session) {
       throw redirect({ to: '/login' });
     }
+    if (!['owner', 'manager'].includes(context.session.role)) {
+      throw redirect({ to: '/' });
+    }
   },
   head: () => ({
     meta: [
@@ -63,6 +66,7 @@ const REPORT_CATEGORIES = {
   Purchases: [
     { title: "Purchase Summary", description: "View purchase summary overview.", icon: ShoppingBag },
     { title: "Products Purchases", description: "View purchase by products overview.", icon: Receipt },
+    { title: "Purchase Price Trend", description: "Compare historical purchase prices by product or supplier across a date range.", icon: TrendingUp },
   ],
   Inventory: [
     { title: "Stock Summary", description: "Stock summary reports.", icon: Database },
@@ -140,7 +144,7 @@ function ReportsPage() {
           </Card>
         ) : (
           filteredReports.map((report) => (
-            <Card key={report.title} className="p-5 hover:shadow-lg transition-shadow group">
+            <Card key={report.title} onClick={() => window.location.assign(`/report?name=${encodeURIComponent(report.title)}`)} className="p-5 hover:shadow-lg transition-shadow group cursor-pointer">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <h2 className="font-semibold text-sm">{report.title}</h2>
@@ -155,7 +159,7 @@ function ReportsPage() {
           ))
         )}
       </div>
+
     </div>
   );
 }
-

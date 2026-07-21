@@ -787,8 +787,8 @@ export const getPurchaseOrdersFn = createServerFn({ method: 'GET' })
     if (!session || !['owner', 'manager'].includes(session.role)) throw new Error('Unauthorized');
 
     const posQuery = data.branchId
-      ? db.select({ id: purchaseOrders.id, supplierId: purchaseOrders.supplierId, status: purchaseOrders.status, totalAmount: purchaseOrders.totalAmount, createdAt: purchaseOrders.createdAt }).from(purchaseOrders).where(eq(purchaseOrders.branchId, data.branchId)).orderBy(desc(purchaseOrders.createdAt))
-      : db.select({ id: purchaseOrders.id, supplierId: purchaseOrders.supplierId, status: purchaseOrders.status, totalAmount: purchaseOrders.totalAmount, createdAt: purchaseOrders.createdAt }).from(purchaseOrders).orderBy(desc(purchaseOrders.createdAt));
+      ? db.select({ id: purchaseOrders.id, supplierId: purchaseOrders.supplierId, invoiceNumber: purchaseOrders.invoiceNumber, status: purchaseOrders.status, totalAmount: purchaseOrders.totalAmount, createdAt: purchaseOrders.createdAt }).from(purchaseOrders).where(eq(purchaseOrders.branchId, data.branchId)).orderBy(desc(purchaseOrders.createdAt))
+      : db.select({ id: purchaseOrders.id, supplierId: purchaseOrders.supplierId, invoiceNumber: purchaseOrders.invoiceNumber, status: purchaseOrders.status, totalAmount: purchaseOrders.totalAmount, createdAt: purchaseOrders.createdAt }).from(purchaseOrders).orderBy(desc(purchaseOrders.createdAt));
 
     const pos = await posQuery;
 
@@ -799,11 +799,12 @@ export const getPurchaseOrdersFn = createServerFn({ method: 'GET' })
     inventoryId: purchaseOrderItems.inventoryId,
     qty: purchaseOrderItems.quantity,
     unitPrice: purchaseOrderItems.unitPrice,
+    expiryDate: purchaseOrderItems.expiryDate,
     name: inventory.name,
     unit: inventory.unit,
   }).from(purchaseOrderItems).leftJoin(inventory, eq(inventory.id, purchaseOrderItems.inventoryId));
 
-  const itemsByOrder = items.reduce<Record<string, Array<{ inventoryId: string; name: string; qty: number; unitPrice: number; unit: string }>>>((acc, item) => {
+  const itemsByOrder = items.reduce<Record<string, Array<{ inventoryId: string; name: string; qty: number; unitPrice: number; unit: string; expiryDate: number | null }>>>((acc, item) => {
     const key = item.purchaseOrderId.toString();
     const entry = {
       inventoryId: item.inventoryId.toString(),
@@ -811,6 +812,7 @@ export const getPurchaseOrdersFn = createServerFn({ method: 'GET' })
       qty: parseFloat(item.qty),
       unitPrice: parseFloat(item.unitPrice),
       unit: item.unit || '',
+      expiryDate: item.expiryDate?.getTime() ?? null,
     };
     acc[key] = acc[key] ? [...acc[key], entry] : [entry];
     return acc;
@@ -819,6 +821,7 @@ export const getPurchaseOrdersFn = createServerFn({ method: 'GET' })
   return pos.map(po => ({
     id: po.id.toString(),
     supplierId: po.supplierId.toString(),
+    invoiceNumber: po.invoiceNumber || `PO-${po.id}`,
     supplierName: sups.find(s => s.id === po.supplierId)?.name || 'Unknown',
     status: po.status,
     totalAmount: parseFloat(po.totalAmount),
@@ -828,7 +831,7 @@ export const getPurchaseOrdersFn = createServerFn({ method: 'GET' })
 });
 
 export const createPurchaseOrderFn = createServerFn({ method: 'POST' })
-  .validator((data: { supplierId: string; branchId: string; items: { inventoryId: string; qty: number; unitPrice: number }[] }) => data)
+  .validator((data: { supplierId: string; branchId: string; invoiceNumber?: string; items: { inventoryId: string; qty: number; unitPrice: number; expiryDate?: string }[] }) => data)
   .handler(async ({ data }) => {
     const session = await getSessionServer();
     if (!session || !['owner', 'manager'].includes(session.role)) throw new Error('Unauthorized');
@@ -841,6 +844,7 @@ export const createPurchaseOrderFn = createServerFn({ method: 'POST' })
       const [po] = await tx.insert(purchaseOrders).values({
         supplierId: parseInt(data.supplierId),
         branchId: data.branchId,
+        invoiceNumber: data.invoiceNumber?.trim() || null,
         status: 'pending',
         totalAmount: total.toString(),
       }).returning();
@@ -851,6 +855,7 @@ export const createPurchaseOrderFn = createServerFn({ method: 'POST' })
           inventoryId: parseInt(item.inventoryId),
           quantity: item.qty.toString(),
           unitPrice: item.unitPrice.toString(),
+          expiryDate: item.expiryDate ? new Date(item.expiryDate) : null,
         }))
       );
 
@@ -895,6 +900,80 @@ export const receivePurchaseOrderFn = createServerFn({ method: 'POST' })
     }
 
     return { success: true };
+  });
+
+// ──────────────────────────────────────────────────────────────
+// REPORTING — PURCHASES & EXPIRY
+// ──────────────────────────────────────────────────────────────
+
+type PurchaseReportFilters = { from?: string; to?: string; supplierId?: string; inventoryId?: string; branchId?: string };
+
+async function purchaseReportRows(filters: PurchaseReportFilters) {
+  const orders = filters.branchId
+    ? await db.select().from(purchaseOrders).where(eq(purchaseOrders.branchId, filters.branchId))
+    : await db.select().from(purchaseOrders);
+  const supplierRows = await db.select().from(suppliers);
+  const itemRows = await db.select({
+    purchaseOrderId: purchaseOrderItems.purchaseOrderId,
+    inventoryId: purchaseOrderItems.inventoryId,
+    quantity: purchaseOrderItems.quantity,
+    unitPrice: purchaseOrderItems.unitPrice,
+    expiryDate: purchaseOrderItems.expiryDate,
+    productName: inventory.name,
+  }).from(purchaseOrderItems).leftJoin(inventory, eq(inventory.id, purchaseOrderItems.inventoryId));
+  const from = filters.from ? new Date(`${filters.from}T00:00:00`) : undefined;
+  const to = filters.to ? new Date(`${filters.to}T23:59:59.999`) : undefined;
+
+  return orders.filter(order => {
+    const supplierMatches = !filters.supplierId || order.supplierId.toString() === filters.supplierId;
+    const dateMatches = (!from || order.createdAt >= from) && (!to || order.createdAt <= to);
+    return supplierMatches && dateMatches;
+  }).flatMap(order => itemRows.filter(item => item.purchaseOrderId === order.id && (!filters.inventoryId || item.inventoryId.toString() === filters.inventoryId)).map(item => {
+    const quantity = parseFloat(item.quantity);
+    const unitPrice = parseFloat(item.unitPrice);
+    return {
+      id: `${order.id}-${item.inventoryId}`,
+      invoiceNumber: order.invoiceNumber || `PO-${order.id}`,
+      status: order.status,
+      supplierId: order.supplierId.toString(),
+      supplierName: supplierRows.find(s => s.id === order.supplierId)?.name || 'Unknown',
+      inventoryId: item.inventoryId.toString(),
+      productName: item.productName || 'Unknown',
+      quantity,
+      unitPrice,
+      total: quantity * unitPrice,
+      purchaseDate: order.createdAt.getTime(),
+      expiryDate: item.expiryDate?.getTime() ?? null,
+    };
+  }));
+}
+
+export const getPurchaseReportFn = createServerFn({ method: 'GET' })
+  .validator((data: PurchaseReportFilters | void) => data || {})
+  .handler(async ({ data }) => {
+    const session = await getSessionServer();
+    if (!session || !['owner', 'manager'].includes(session.role)) throw new Error('Unauthorized');
+    return purchaseReportRows(data);
+  });
+
+export const getExpiringInventoryReportFn = createServerFn({ method: 'GET' })
+  .validator((data: { days?: number; branchId?: string } | void) => data || {})
+  .handler(async ({ data }) => {
+    const session = await getSessionServer();
+    if (!session || !['owner', 'manager'].includes(session.role)) throw new Error('Unauthorized');
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const through = new Date(today);
+    through.setDate(through.getDate() + (data.days ?? 30));
+    return (await purchaseReportRows({ branchId: data.branchId })).filter(row => row.status === 'received' && row.expiryDate !== null && new Date(row.expiryDate) <= through);
+  });
+
+export const getPurchasePriceTrendFn = createServerFn({ method: 'GET' })
+  .validator((data: PurchaseReportFilters | void) => data || {})
+  .handler(async ({ data }) => {
+    const session = await getSessionServer();
+    if (!session || !['owner', 'manager'].includes(session.role)) throw new Error('Unauthorized');
+    return (await purchaseReportRows(data)).sort((a, b) => a.purchaseDate - b.purchaseDate);
   });
 
 // ──────────────────────────────────────────────────────────────

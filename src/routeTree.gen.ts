@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as TakeawayRouteImport } from './routes/takeaway'
 import { Route as ShiftRouteImport } from './routes/shift'
 import { Route as ReportsRouteImport } from './routes/reports'
+import { Route as ReportRouteImport } from './routes/report'
 import { Route as PurchasesRouteImport } from './routes/purchases'
 import { Route as PosRouteImport } from './routes/pos'
 import { Route as MenuRouteImport } from './routes/menu'
@@ -34,6 +35,11 @@ const ShiftRoute = ShiftRouteImport.update({
 const ReportsRoute = ReportsRouteImport.update({
   id: '/reports',
   path: '/reports',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReportRoute = ReportRouteImport.update({
+  id: '/report',
+  path: '/report',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PurchasesRoute = PurchasesRouteImport.update({
@@ -86,6 +92,7 @@ export interface FileRoutesByFullPath {
   '/menu': typeof MenuRoute
   '/pos': typeof PosRoute
   '/purchases': typeof PurchasesRoute
+  '/report': typeof ReportRoute
   '/reports': typeof ReportsRoute
   '/shift': typeof ShiftRoute
   '/takeaway': typeof TakeawayRoute
@@ -99,6 +106,7 @@ export interface FileRoutesByTo {
   '/menu': typeof MenuRoute
   '/pos': typeof PosRoute
   '/purchases': typeof PurchasesRoute
+  '/report': typeof ReportRoute
   '/reports': typeof ReportsRoute
   '/shift': typeof ShiftRoute
   '/takeaway': typeof TakeawayRoute
@@ -113,6 +121,7 @@ export interface FileRoutesById {
   '/menu': typeof MenuRoute
   '/pos': typeof PosRoute
   '/purchases': typeof PurchasesRoute
+  '/report': typeof ReportRoute
   '/reports': typeof ReportsRoute
   '/shift': typeof ShiftRoute
   '/takeaway': typeof TakeawayRoute
@@ -128,6 +137,7 @@ export interface FileRouteTypes {
     | '/menu'
     | '/pos'
     | '/purchases'
+    | '/report'
     | '/reports'
     | '/shift'
     | '/takeaway'
@@ -141,6 +151,7 @@ export interface FileRouteTypes {
     | '/menu'
     | '/pos'
     | '/purchases'
+    | '/report'
     | '/reports'
     | '/shift'
     | '/takeaway'
@@ -154,6 +165,7 @@ export interface FileRouteTypes {
     | '/menu'
     | '/pos'
     | '/purchases'
+    | '/report'
     | '/reports'
     | '/shift'
     | '/takeaway'
@@ -168,6 +180,7 @@ export interface RootRouteChildren {
   MenuRoute: typeof MenuRoute
   PosRoute: typeof PosRoute
   PurchasesRoute: typeof PurchasesRoute
+  ReportRoute: typeof ReportRoute
   ReportsRoute: typeof ReportsRoute
   ShiftRoute: typeof ShiftRoute
   TakeawayRoute: typeof TakeawayRoute
@@ -194,6 +207,13 @@ declare module '@tanstack/react-router' {
       path: '/reports'
       fullPath: '/reports'
       preLoaderRoute: typeof ReportsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/report': {
+      id: '/report'
+      path: '/report'
+      fullPath: '/report'
+      preLoaderRoute: typeof ReportRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/purchases': {
@@ -264,6 +284,7 @@ const rootRouteChildren: RootRouteChildren = {
   MenuRoute: MenuRoute,
   PosRoute: PosRoute,
   PurchasesRoute: PurchasesRoute,
+  ReportRoute: ReportRoute,
   ReportsRoute: ReportsRoute,
   ShiftRoute: ShiftRoute,
   TakeawayRoute: TakeawayRoute,

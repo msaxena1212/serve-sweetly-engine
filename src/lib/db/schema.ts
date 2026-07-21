@@ -118,6 +118,7 @@ export const purchaseOrders = pgTable('purchase_orders', {
   id: serial('id').primaryKey(),
   branchId: text('branch_id').default('br-1').notNull(),
   supplierId: integer('supplier_id').references(() => suppliers.id).notNull(),
+  invoiceNumber: text('invoice_number'),
   status: text('status').default('pending').notNull(), // 'pending', 'received', 'cancelled'
   totalAmount: decimal('total_amount', { precision: 10, scale: 2 }).default('0.00').notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
@@ -129,6 +130,7 @@ export const purchaseOrderItems = pgTable('purchase_order_items', {
   inventoryId: integer('inventory_id').references(() => inventory.id).notNull(),
   quantity: decimal('quantity', { precision: 10, scale: 3 }).notNull(),
   unitPrice: decimal('unit_price', { precision: 10, scale: 2 }).notNull(),
+  expiryDate: timestamp('expiry_date'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 

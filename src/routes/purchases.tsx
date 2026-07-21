@@ -43,8 +43,8 @@ export const Route = createFileRoute("/purchases")({
 
 // ─── Types ───────────────────────────────────────────────────
 interface Supplier { id: string; name: string; contactInfo: string; }
-interface POItem { inventoryId: string; name: string; qty: number; unitPrice: number; unit: string; }
-interface PurchaseOrder { id: string; supplierId: string; supplierName: string; status: string; totalAmount: number; createdAt: number; items: POItem[]; }
+interface POItem { inventoryId: string; name: string; qty: number; unitPrice: number; unit: string; expiryDate?: string; }
+interface PurchaseOrder { id: string; invoiceNumber: string; supplierId: string; supplierName: string; status: string; totalAmount: number; createdAt: number; items: POItem[]; }
 
 function PurchasesPage() {
   const loaderData = Route.useLoaderData();
@@ -63,7 +63,7 @@ function PurchasesPage() {
 
   // PO creation state
   const [showNewPO, setShowNewPO] = useState(false);
-  const [newPO, setNewPO] = useState<{ supplierId: string; items: POItem[] }>({ supplierId: "", items: [] });
+  const [newPO, setNewPO] = useState<{ supplierId: string; invoiceNumber: string; items: POItem[] }>({ supplierId: "", invoiceNumber: "", items: [] });
 
   // ─── Supplier handlers ─────────────────────────────────────────
   const openNewSupplier = () => {
@@ -123,11 +123,11 @@ function PurchasesPage() {
 
     setLoading(true);
     try {
-      await createPurchaseOrderFn({ data: { supplierId: newPO.supplierId, branchId, items: newPO.items.map(i => ({ inventoryId: i.inventoryId, qty: i.qty, unitPrice: i.unitPrice })) } });
+      await createPurchaseOrderFn({ data: { supplierId: newPO.supplierId, invoiceNumber: newPO.invoiceNumber, branchId, items: newPO.items.map(i => ({ inventoryId: i.inventoryId, qty: i.qty, unitPrice: i.unitPrice, expiryDate: i.expiryDate })) } });
       const updated = await getPurchaseOrdersFn({ data: { branchId } });
       setPurchaseOrders(updated);
       setShowNewPO(false);
-      setNewPO({ supplierId: "", items: [] });
+      setNewPO({ supplierId: "", invoiceNumber: "", items: [] });
       toast.success("Purchase order created.");
     } catch (e: any) {
       toast.error(e.message || "Failed to create purchase order.");
@@ -241,6 +241,7 @@ function PurchasesPage() {
                   <div>
                     <div className="font-semibold">{po.supplierName}</div>
                     <div className="text-xs text-muted-foreground">
+                      Invoice: {po.invoiceNumber} · {" "}
                       {new Date(po.createdAt).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
                     </div>
                   </div>
@@ -305,6 +306,11 @@ function PurchasesPage() {
               </div>
 
               <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Invoice Number (optional)</label>
+                <Input placeholder="e.g. INV-10024" value={newPO.invoiceNumber} onChange={e => setNewPO(p => ({ ...p, invoiceNumber: e.target.value }))} />
+              </div>
+
+              <div>
                 <label className="text-xs text-muted-foreground mb-1 block">Supplier *</label>
                 <select
                   className="w-full h-9 rounded-md border bg-background px-3 text-sm"
@@ -339,6 +345,9 @@ function PurchasesPage() {
                       />
                       <Input type="number" className="h-7 w-20 text-xs" placeholder="₹/unit" value={item.unitPrice || ""}
                         onChange={e => setNewPO(p => ({ ...p, items: p.items.map(i => i.inventoryId === item.inventoryId ? { ...i, unitPrice: parseFloat(e.target.value) || 0 } : i) }))}
+                      />
+                      <Input type="date" className="h-7 w-32 text-xs" title="Expiry date (optional)" value={item.expiryDate || ""}
+                        onChange={e => setNewPO(p => ({ ...p, items: p.items.map(i => i.inventoryId === item.inventoryId ? { ...i, expiryDate: e.target.value || undefined } : i) }))}
                       />
                       <button onClick={() => setNewPO(p => ({ ...p, items: p.items.filter(i => i.inventoryId !== item.inventoryId) }))} className="text-muted-foreground hover:text-destructive">
                         <X className="h-3.5 w-3.5" />
