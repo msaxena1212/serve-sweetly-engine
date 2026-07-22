@@ -22,7 +22,7 @@ export const Route = createFileRoute("/pos")({
     }
   },
   loader: async () => {
-    const shiftData = await getShiftStatusFn();
+    const shiftData = await getShiftStatusFn({ data: { branchId: 'br-1' } });
     return { shiftData };
   },
   head: () => ({

@@ -20,7 +20,7 @@ export const Route = createFileRoute("/takeaway")({
     }
   },
   loader: async () => {
-    const shiftData = await getShiftStatusFn();
+    const shiftData = await getShiftStatusFn({ data: { branchId: 'br-1' } });
     return { shiftData };
   },
   head: () => ({
