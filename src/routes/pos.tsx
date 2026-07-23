@@ -1,5 +1,5 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { usePos } from "@/lib/pos-store";
 import { OrderPanel } from "@/components/order-panel";
 import { MenuPicker } from "@/components/menu-picker";
@@ -7,12 +7,16 @@ import { cn } from "@/lib/utils";
 import { useConfig } from "@/lib/config-store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { getShiftStatusFn } from "@/lib/api";
+import { getShiftStatusFn, getReservationsFn, updateReservationStatusFn } from "@/lib/api";
 import { RecentBillsModal } from "@/components/recent-bills";
+import { ReservationModal } from "@/components/reservation-modal";
+import { useRouter } from "@tanstack/react-router";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
-import { CalendarClock, User, Phone, AlertCircle, X } from "lucide-react";
+import { CalendarClock, User, Phone, AlertCircle, X, ArrowRightLeft, Merge } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/pos")({
@@ -23,7 +27,8 @@ export const Route = createFileRoute("/pos")({
   },
   loader: async () => {
     const shiftData = await getShiftStatusFn({ data: { branchId: 'br-1' } });
-    return { shiftData };
+    const reservations = await getReservationsFn({ data: { branchId: 'br-1' } });
+    return { shiftData, reservations };
   },
   head: () => ({
     meta: [
@@ -34,51 +39,41 @@ export const Route = createFileRoute("/pos")({
   component: PosPage,
 });
 
-// ─── Types ───────────────────────────────────────────────────
-interface Reservation {
-  tableId: string;
-  tableName: string;
-  guestName: string;
-  phone: string;
-  pax: number;
-  time: string; // "HH:MM"
-  note: string;
-  reservedAt: number; // timestamp
-}
-
-// ─── Reservation storage (sessionStorage) ────────────────────
-const RES_KEY = "pos-reservations-v1";
-
-function loadReservations(): Reservation[] {
-  try {
-    return JSON.parse(sessionStorage.getItem(RES_KEY) || "[]");
-  } catch {
-    return [];
-  }
-}
-
-function saveReservations(list: Reservation[]) {
-  sessionStorage.setItem(RES_KEY, JSON.stringify(list));
-}
-
 // ─── Main component ──────────────────────────────────────────
 function PosPage() {
-  const { shiftData } = Route.useLoaderData();
+  const router = useRouter();
+  const loaderData = Route.useLoaderData();
+  const [reservations, setReservations] = useState(loaderData.reservations);
   const { tables, orders, openOrderForTable, dispatch } = usePos();
   const { config } = useConfig();
   const [selectedTable, setSelectedTable] = useState<string | null>(null);
   const [showRecentBills, setShowRecentBills] = useState(false);
 
-  // Reservations state
-  const [reservations, setReservations] = useState<Reservation[]>(loadReservations);
+  useEffect(() => {
+    const id = setInterval(async () => {
+      try {
+        const { getReservationsFn } = await import("@/lib/api");
+        const res = await getReservationsFn({ data: { branchId: 'br-1', _t: Date.now() } });
+        setReservations(res);
+      } catch (e) {}
+    }, 5000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Modals state
+  const [modalOrderId, setModalOrderId] = useState<string | null>(null);
+  const [showTransferModal, setShowTransferModal] = useState(false);
+  const [transferTargetId, setTransferTargetId] = useState<string>("");
+
+  const [showMergeModal, setShowMergeModal] = useState(false);
+  const [mergeTargetId, setMergeTargetId] = useState<string>("");
+
   const [showReserveModal, setShowReserveModal] = useState(false);
   const [reserveTableId, setReserveTableId] = useState<string>("");
-  const [resName, setResName] = useState("");
-  const [resPhone, setResPhone] = useState("");
-  const [resPax, setResPax] = useState("2");
-  const [resTime, setResTime] = useState("");
-  const [resNote, setResNote] = useState("");
-  const [resErrors, setResErrors] = useState<Record<string, string>>({});
+
+  const [showSeatModal, setShowSeatModal] = useState(false);
+  const [seatReservationId, setSeatReservationId] = useState<number | null>(null);
+  const [seatTableId, setSeatTableId] = useState<string>("");
 
   const sections = config.tableSections
     .filter((s) => s.active)
@@ -89,59 +84,68 @@ function PosPage() {
     orders.find((o) => o.tableId === tid && o.status === "open");
 
   const reservationForTable = (tid: string) =>
-    reservations.find((r) => r.tableId === tid);
+    reservations.find((r) => r.tableId?.toString() === tid && r.type === 'advance');
 
   const activeOrder = selectedTable ? orderForTable(selectedTable) : null;
   const showGrid = !selectedTable || !activeOrder;
 
   // ── Transfer / Merge ───────────────────────────
-  const handleTransfer = async (order: any) => {
-    const targetName = prompt("Enter target table name (e.g., T2, P1):");
-    if (!targetName) return;
-    const targetTable = tables.find(
-      (t) => t.name.toLowerCase() === targetName.toLowerCase()
-    );
-    if (!targetTable) { toast.error("Table not found"); return; }
+  const openTransferModal = (order: any) => {
+    setModalOrderId(order.id);
+    setTransferTargetId("");
+    setShowTransferModal(true);
+  };
 
-    const existingOrder = orders.find(
-      (o) => o.tableId === targetTable.id && o.status === "open"
-    );
-    if (existingOrder) {
-      toast.error("Target table is occupied. Use Merge instead.");
-      return;
-    }
+  const executeTransfer = async () => {
+    if (!modalOrderId || !transferTargetId) return;
+    const targetTable = tables.find((t) => t.id === transferTargetId);
+    if (!targetTable) return;
 
-    dispatch({ type: "TRANSFER_TABLE", orderId: order.id, newTableId: targetTable.id });
+    dispatch({ type: "TRANSFER_TABLE", orderId: modalOrderId, newTableId: targetTable.id });
     setSelectedTable(targetTable.id);
+    setShowTransferModal(false);
 
     try {
       const { transferTableFn } = await import("@/lib/api");
-      await transferTableFn({ data: { orderId: order.id, newTableId: targetTable.id } });
+      await transferTableFn({ data: { orderId: modalOrderId, newTableId: targetTable.id } });
     } catch (e) {
       console.error("Failed to sync transfer", e);
     }
   };
 
-  const handleMerge = async (order: any) => {
-    const targetName = prompt("Enter target table name to merge into (e.g., T2):");
-    if (!targetName) return;
-    const targetTable = tables.find(
-      (t) => t.name.toLowerCase() === targetName.toLowerCase()
-    );
-    if (!targetTable) { toast.error("Table not found"); return; }
+  const openMergeModal = (order: any) => {
+    setModalOrderId(order.id);
+    setMergeTargetId("");
+    setShowMergeModal(true);
+  };
 
-    const targetOrder = orders.find(
-      (o) => o.tableId === targetTable.id && o.status === "open"
-    );
-    if (!targetOrder) { toast.error("Target table has no open order."); return; }
-    if (targetOrder.id === order.id) { toast.error("Cannot merge into itself."); return; }
+  const executeMerge = async () => {
+    if (!modalOrderId || !mergeTargetId) return;
+    const targetTable = tables.find((t) => t.id === mergeTargetId);
+    if (!targetTable) return;
+    const targetOrder = orders.find((o) => o.tableId === targetTable.id && o.status === "open");
+    
+    if (!targetOrder) {
+      // If target table is vacant, it acts as a transfer.
+      dispatch({ type: "TRANSFER_TABLE", orderId: modalOrderId, newTableId: targetTable.id });
+      setSelectedTable(targetTable.id);
+      setShowMergeModal(false);
+      try {
+        const { updateOrderFn } = await import("@/lib/api");
+        await updateOrderFn({ data: { orderId: modalOrderId, tableId: targetTable.id } });
+      } catch (e) {
+        console.error("Failed to sync merge (transfer)", e);
+      }
+      return;
+    }
 
-    dispatch({ type: "MERGE_TABLES", sourceOrderId: order.id, targetOrderId: targetOrder.id });
+    dispatch({ type: "MERGE_TABLES", sourceOrderId: modalOrderId, targetOrderId: targetOrder.id });
     setSelectedTable(targetTable.id);
+    setShowMergeModal(false);
 
     try {
       const { mergeTablesFn } = await import("@/lib/api");
-      await mergeTablesFn({ data: { sourceOrderId: order.id, targetOrderId: targetOrder.id } });
+      await mergeTablesFn({ data: { sourceOrderId: modalOrderId, targetOrderId: targetOrder.id } });
     } catch (e) {
       console.error("Failed to sync merge", e);
     }
@@ -149,53 +153,37 @@ function PosPage() {
 
   // ── Reservation handlers ───────────────────────
   const openReserveModal = (tableId?: string) => {
-    setReserveTableId(tableId || (tables[0]?.id ?? ""));
-    setResName("");
-    setResPhone("");
-    setResPax("2");
-    setResTime("");
-    setResNote("");
-    setResErrors({});
+    setReserveTableId(tableId || "");
     setShowReserveModal(true);
   };
 
-  const handleReserveSave = () => {
-    const errors: Record<string, string> = {};
-    if (!resName.trim()) errors.name = "Guest name is required.";
-    if (!resPhone.trim()) errors.phone = "Phone number is required.";
-    else if (!/^\d{10}$/.test(resPhone.trim())) errors.phone = "Enter a valid 10-digit number.";
-    if (!reserveTableId) errors.table = "Select a table.";
-    if (!resTime) errors.time = "Reservation time is required.";
-
-    if (Object.keys(errors).length > 0) {
-      setResErrors(errors);
-      return;
+  const cancelReservation = async (id: number) => {
+    try {
+      await updateReservationStatusFn({ data: { id, status: 'cancelled' } });
+      toast.success("Reservation cancelled.");
+      router.invalidate();
+    } catch {
+      toast.error("Failed to cancel reservation");
     }
-
-    const table = tables.find((t) => t.id === reserveTableId);
-    const newRes: Reservation = {
-      tableId: reserveTableId,
-      tableName: table?.name ?? reserveTableId,
-      guestName: resName.trim(),
-      phone: resPhone.trim(),
-      pax: parseInt(resPax) || 2,
-      time: resTime,
-      note: resNote.trim(),
-      reservedAt: Date.now(),
-    };
-
-    const updated = [...reservations.filter((r) => r.tableId !== reserveTableId), newRes];
-    setReservations(updated);
-    saveReservations(updated);
-    setShowReserveModal(false);
-    toast.success(`Table ${table?.name} reserved for ${resName.trim()} at ${resTime}.`);
   };
 
-  const cancelReservation = (tableId: string) => {
-    const updated = reservations.filter((r) => r.tableId !== tableId);
-    setReservations(updated);
-    saveReservations(updated);
-    toast.success("Reservation cancelled.");
+  const executeSeat = async () => {
+    if (!seatReservationId || !seatTableId) return;
+    try {
+      await updateReservationStatusFn({ data: { id: seatReservationId, status: 'seated', tableId: parseInt(seatTableId) } });
+      await openOrderForTable(seatTableId);
+      toast.success("Guest seated successfully.");
+      setShowSeatModal(false);
+      router.invalidate();
+    } catch {
+      toast.error("Failed to seat guest");
+    }
+  };
+
+  const openSeatModal = (id: number) => {
+    setSeatReservationId(id);
+    setSeatTableId("");
+    setShowSeatModal(true);
   };
 
   // ── Render ─────────────────────────────────────
@@ -288,7 +276,7 @@ function PosPage() {
                           {isReserved && (
                             <div className="absolute -top-1.5 -right-1.5 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                               <button
-                                title={`${res.guestName} · ${res.phone} · ${res.pax}pax · ${res.time}`}
+                                title={`${res.customerName} · ${res.customerPhone} · ${res.pax}pax · ${res.reservationTime}`}
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   openReserveModal(t.id);
@@ -301,7 +289,7 @@ function PosPage() {
                                 title="Cancel reservation"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  cancelReservation(t.id);
+                                  cancelReservation(res.id);
                                 }}
                                 className="h-5 w-5 rounded-full bg-destructive text-white text-[9px] flex items-center justify-center shadow hover:bg-destructive/80"
                               >
@@ -327,16 +315,16 @@ function PosPage() {
                 </button>
                 <div className="flex gap-2">
                   <button
-                    className="text-xs px-3 py-1.5 border rounded-md hover:bg-muted transition-colors font-medium"
-                    onClick={() => handleTransfer(activeOrder)}
+                    className="text-xs px-3 py-1.5 border rounded-md hover:bg-muted transition-colors font-medium flex items-center gap-1.5"
+                    onClick={() => openTransferModal(activeOrder)}
                   >
-                    Transfer Table
+                    <ArrowRightLeft className="h-3.5 w-3.5" /> Transfer
                   </button>
                   <button
-                    className="text-xs px-3 py-1.5 border rounded-md hover:bg-muted transition-colors font-medium"
-                    onClick={() => handleMerge(activeOrder)}
+                    className="text-xs px-3 py-1.5 border rounded-md hover:bg-muted transition-colors font-medium flex items-center gap-1.5"
+                    onClick={() => openMergeModal(activeOrder)}
                   >
-                    Merge Tables
+                    <Merge className="h-3.5 w-3.5" /> Merge
                   </button>
                   <button
                     className="text-xs px-3 py-1.5 border border-amber-400 text-amber-700 rounded-md hover:bg-amber-50 transition-colors font-medium"
@@ -358,42 +346,92 @@ function PosPage() {
             <div className="h-full grid place-items-center text-sm text-muted-foreground text-center px-6">
               {/* Upcoming reservations list */}
               {reservations.length > 0 ? (
-                <div className="w-full space-y-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
-                    Reservations Today
-                  </p>
-                  {reservations
-                    .slice()
-                    .sort((a, b) => a.time.localeCompare(b.time))
-                    .map((r) => (
-                      <div
-                        key={r.tableId}
-                        className="bg-card border border-amber-300 rounded-lg p-3 text-left space-y-1"
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-amber-700 dark:text-amber-400">
-                            {r.tableName} · {r.time}
-                          </span>
-                          <button
-                            onClick={() => cancelReservation(r.tableId)}
-                            className="text-muted-foreground hover:text-destructive transition-colors"
-                          >
-                            <X className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                        <div className="flex items-center gap-1 text-[11px] text-foreground font-medium">
-                          <User className="h-3 w-3 text-muted-foreground" />
-                          {r.guestName} · {r.pax} pax
-                        </div>
-                        <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                          <Phone className="h-3 w-3" />
-                          {r.phone}
-                        </div>
-                        {r.note && (
-                          <p className="text-[10px] text-muted-foreground italic">{r.note}</p>
-                        )}
+                <div className="w-full space-y-4">
+                  {reservations.filter(r => r.type === 'waitlist').length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
+                        Waitlist Queue
+                      </p>
+                      <div className="space-y-2">
+                        {reservations.filter(r => r.type === 'waitlist').map(r => (
+                          <div key={r.id} className="bg-card border border-primary/40 rounded-lg p-3 text-left space-y-1">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-bold text-primary">
+                                Waitlist
+                              </span>
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => openSeatModal(r.id)}
+                                  className="text-xs font-semibold text-green-600 hover:text-green-700 transition-colors"
+                                >
+                                  Seat
+                                </button>
+                                <button
+                                  onClick={() => cancelReservation(r.id)}
+                                  className="text-muted-foreground hover:text-destructive transition-colors"
+                                >
+                                  <X className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1 text-[11px] text-foreground font-medium">
+                              <User className="h-3 w-3 text-muted-foreground" />
+                              {r.customerName} · {r.pax} pax
+                            </div>
+                            <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                              <Phone className="h-3 w-3" />
+                              {r.customerPhone}
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    ))}
+                    </div>
+                  )}
+
+                  {reservations.filter(r => r.type === 'advance').length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
+                        Advance Reservations
+                      </p>
+                      <div className="space-y-2">
+                        {reservations
+                          .filter(r => r.type === 'advance')
+                          .slice()
+                          .sort((a, b) => (a.reservationTime || "").localeCompare(b.reservationTime || ""))
+                          .map((r) => (
+                            <div
+                              key={r.id}
+                              className="bg-card border border-amber-300 rounded-lg p-3 text-left space-y-1"
+                            >
+                              <div className="flex items-center justify-between">
+                                  <span className="text-xs font-bold text-amber-700 dark:text-amber-400">
+                                    {tables.find(t => t.id === r.tableId?.toString())?.name} · {r.reservationTime}
+                                  </span>
+                                  <div className="flex gap-2">
+                                    <button
+                                      onClick={() => cancelReservation(r.id)}
+                                      className="text-muted-foreground hover:text-destructive transition-colors"
+                                    >
+                                      <X className="h-3.5 w-3.5" />
+                                    </button>
+                                  </div>
+                              </div>
+                              <div className="flex items-center gap-1 text-[11px] text-foreground font-medium">
+                                <User className="h-3 w-3 text-muted-foreground" />
+                                {r.customerName} · {r.pax} pax
+                              </div>
+                              <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                                <Phone className="h-3 w-3" />
+                                {r.customerPhone}
+                              </div>
+                              {r.notes && (
+                                <p className="text-[10px] text-muted-foreground italic">{r.notes}</p>
+                              )}
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <span>Select a table to start or resume an order.</span>
@@ -403,144 +441,145 @@ function PosPage() {
         </aside>
       </div>
 
-      {/* ── Reservation Modal ── */}
-      <Dialog open={showReserveModal} onOpenChange={setShowReserveModal}>
-        <DialogContent className="sm:max-w-md">
+      {/* ── Transfer Modal ── */}
+      <Dialog open={showTransferModal} onOpenChange={setShowTransferModal}>
+        <DialogContent className="sm:max-w-sm backdrop-blur-xl bg-background/90 border-indigo-500/20 shadow-2xl">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <CalendarClock className="h-5 w-5 text-amber-500" />
-              Reserve a Table
+            <DialogTitle className="flex items-center gap-2 text-indigo-500">
+              <ArrowRightLeft className="h-5 w-5" />
+              Transfer Table
             </DialogTitle>
             <DialogDescription>
-              Enter guest details and preferred time. Reserved tables show an amber border on the floor map.
+              Move the current order to an empty table.
             </DialogDescription>
           </DialogHeader>
-
-          <div className="space-y-4 py-2">
-            {/* Table Select */}
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">Table *</label>
-              <select
-                value={reserveTableId}
-                onChange={(e) => setReserveTableId(e.target.value)}
-                className={cn(
-                  "w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring",
-                  resErrors.table && "border-destructive"
-                )}
-              >
-                <option value="">— Select table —</option>
-                {tables.map((t) => {
-                  const hasOrder = !!orderForTable(t.id);
-                  const hasRes = !!reservationForTable(t.id);
-                  return (
-                    <option key={t.id} value={t.id} disabled={hasOrder}>
-                      {t.name} ({t.section}){hasOrder ? " — Occupied" : hasRes ? " — Reserved" : ""}
-                    </option>
-                  );
-                })}
-              </select>
-              {resErrors.table && (
-                <p className="text-[11px] text-destructive flex items-center gap-1">
-                  <AlertCircle className="h-3 w-3" /> {resErrors.table}
-                </p>
-              )}
-            </div>
-
-            {/* Guest Name */}
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">Guest Name *</label>
-              <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                <Input
-                  placeholder="e.g. Priya Sharma"
-                  value={resName}
-                  onChange={(e) => { setResName(e.target.value); setResErrors((p) => ({ ...p, name: "" })); }}
-                  className={cn("pl-8", resErrors.name && "border-destructive")}
-                />
-              </div>
-              {resErrors.name && (
-                <p className="text-[11px] text-destructive flex items-center gap-1">
-                  <AlertCircle className="h-3 w-3" /> {resErrors.name}
-                </p>
-              )}
-            </div>
-
-            {/* Phone */}
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">Mobile Number *</label>
-              <div className="relative">
-                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                <Input
-                  placeholder="10-digit mobile"
-                  value={resPhone}
-                  onChange={(e) => {
-                    setResPhone(e.target.value.replace(/\D/g, "").slice(0, 10));
-                    setResErrors((p) => ({ ...p, phone: "" }));
-                  }}
-                  className={cn("pl-8", resErrors.phone && "border-destructive")}
-                  inputMode="numeric"
-                  maxLength={10}
-                />
-              </div>
-              {resErrors.phone && (
-                <p className="text-[11px] text-destructive flex items-center gap-1">
-                  <AlertCircle className="h-3 w-3" /> {resErrors.phone}
-                </p>
-              )}
-            </div>
-
-            {/* Pax + Time row */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground">Guests (Pax)</label>
-                <Input
-                  type="number"
-                  min={1}
-                  max={20}
-                  value={resPax}
-                  onChange={(e) => setResPax(e.target.value)}
-                  className="text-sm"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground">Time *</label>
-                <Input
-                  type="time"
-                  value={resTime}
-                  onChange={(e) => { setResTime(e.target.value); setResErrors((p) => ({ ...p, time: "" })); }}
-                  className={cn("text-sm", resErrors.time && "border-destructive")}
-                />
-                {resErrors.time && (
-                  <p className="text-[11px] text-destructive flex items-center gap-1">
-                    <AlertCircle className="h-3 w-3" /> {resErrors.time}
-                  </p>
-                )}
-              </div>
-            </div>
-
-            {/* Note */}
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">Note (optional)</label>
-              <Input
-                placeholder="e.g. Window seat, Anniversary"
-                value={resNote}
-                onChange={(e) => setResNote(e.target.value)}
-                className="text-sm"
-              />
+          <div className="py-4 space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Select Destination Table</label>
+              <Select value={transferTargetId} onValueChange={setTransferTargetId}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Choose a table..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {tables.filter(t => t.id !== selectedTable && !orderForTable(t.id)).length === 0 ? (
+                    <SelectItem value="none" disabled>No empty tables available</SelectItem>
+                  ) : (
+                    tables.map(t => {
+                      const isOccupied = !!orderForTable(t.id);
+                      if (t.id === selectedTable || isOccupied) return null;
+                      return <SelectItem key={t.id} value={t.id}>{t.name} ({t.section})</SelectItem>;
+                    })
+                  )}
+                </SelectContent>
+              </Select>
             </div>
           </div>
-
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setShowReserveModal(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleReserveSave} className="bg-amber-500 hover:bg-amber-600 text-white">
-              <CalendarClock className="h-4 w-4 mr-1.5" />
-              Confirm Reservation
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setShowTransferModal(false)}>Cancel</Button>
+            <Button onClick={executeTransfer} disabled={!transferTargetId || transferTargetId === 'none'} className="bg-indigo-600 hover:bg-indigo-700 text-white">
+              Confirm Transfer
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ── Merge Modal ── */}
+      <Dialog open={showMergeModal} onOpenChange={setShowMergeModal}>
+        <DialogContent className="sm:max-w-sm backdrop-blur-xl bg-background/90 border-fuchsia-500/20 shadow-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-fuchsia-500">
+              <Merge className="h-5 w-5" />
+              Merge Tables
+            </DialogTitle>
+            <DialogDescription>
+              Combine the current order into another occupied table.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Select Target Table</label>
+              <Select value={mergeTargetId} onValueChange={setMergeTargetId}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Choose target table..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {tables.filter(t => t.id !== selectedTable).length === 0 ? (
+                    <SelectItem value="none" disabled>No other tables available</SelectItem>
+                  ) : (
+                    tables.filter(t => t.id !== selectedTable).map(t => {
+                      const tgtOrder = orderForTable(t.id);
+                      return (
+                        <SelectItem key={t.id} value={t.id}>
+                          <div className="flex justify-between items-center w-[250px]">
+                            <span>{t.name} ({t.section})</span>
+                            <span className="text-xs text-muted-foreground">
+                              {tgtOrder ? `${tgtOrder.items.length} items` : `${t.seats} vacant seats`}
+                            </span>
+                          </div>
+                        </SelectItem>
+                      );
+                    })
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setShowMergeModal(false)}>Cancel</Button>
+            <Button onClick={executeMerge} disabled={!mergeTargetId || mergeTargetId === 'none'} className="bg-fuchsia-600 hover:bg-fuchsia-700 text-white">
+              Confirm Merge
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Seat Guest Modal ── */}
+      <Dialog open={showSeatModal} onOpenChange={setShowSeatModal}>
+        <DialogContent className="sm:max-w-sm backdrop-blur-xl bg-background/90 border-green-500/20 shadow-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-green-500">
+              <User className="h-5 w-5" />
+              Seat Guest
+            </DialogTitle>
+            <DialogDescription>
+              Select an empty table to seat this waitlist guest.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Select Empty Table</label>
+              <Select value={seatTableId} onValueChange={setSeatTableId}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Choose a table..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {tables.filter(t => !orderForTable(t.id)).length === 0 ? (
+                    <SelectItem value="none" disabled>No empty tables available</SelectItem>
+                  ) : (
+                    tables.map(t => {
+                      if (orderForTable(t.id)) return null;
+                      return <SelectItem key={t.id} value={t.id}>{t.name} ({t.section})</SelectItem>;
+                    })
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setShowSeatModal(false)}>Cancel</Button>
+            <Button onClick={executeSeat} disabled={!seatTableId || seatTableId === 'none'} className="bg-green-600 hover:bg-green-700 text-white">
+              Confirm Seating
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <ReservationModal 
+        isOpen={showReserveModal} 
+        onClose={() => setShowReserveModal(false)} 
+        tables={tables} 
+        defaultTableId={reserveTableId}
+      />
     </div>
   );
 }

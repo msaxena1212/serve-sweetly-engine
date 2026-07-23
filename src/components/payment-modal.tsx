@@ -4,6 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CreditCard, Banknote, Smartphone, X, Check, Wallet, Printer } from "lucide-react";
 import { useConfig } from "@/lib/config-store";
+import { getTopWaitlistFn } from "@/lib/api";
+import { toast } from "sonner";
 
 interface PaymentModalProps {
   order: Order;
@@ -49,6 +51,15 @@ export function PaymentModal({ order, onClose }: PaymentModalProps) {
       await updateOrderFn({
         data: { orderId: order.id, status: "paid", total: totals.total.toString(), paymentMethodId: methodId },
       });
+      
+      // Auto-notify Waitlist User if this was a table
+      if (order.tableId) {
+        const nextUser = await getTopWaitlistFn({ data: { branchId: 'br-1' } });
+        if (nextUser) {
+          toast.success(`Table is ready! Texting Waitlist Guest: ${nextUser.customerName}...`);
+          toast(`Message Sent: "Hello ${nextUser.customerName}, a table is now ready for you! Please proceed to the host."`, { duration: 6000 });
+        }
+      }
     } catch (e) {
       console.error("Failed to sync payment", e);
     }

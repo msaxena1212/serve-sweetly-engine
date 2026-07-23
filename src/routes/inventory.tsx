@@ -193,18 +193,7 @@ function InventoryPage() {
           >
             <Package className="h-3.5 w-3.5 mr-1.5" /> Stock Levels
           </Button>
-          <Button
-            variant={tab === "orders" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setTab("orders")}
-          >
-            <ShoppingCart className="h-3.5 w-3.5 mr-1.5" /> Purchase Orders
-            {orders.filter((o) => o.status === "sent").length > 0 && (
-              <span className="ml-1.5 bg-primary-foreground text-primary text-[10px] px-1.5 py-0.5 rounded-full font-bold">
-                {orders.filter((o) => o.status === "sent").length}
-              </span>
-            )}
-          </Button>
+
           <Button
             variant={tab === "count" ? "default" : "outline"}
             size="sm"
@@ -260,7 +249,7 @@ function InventoryPage() {
                   <th className="text-right px-4 py-2.5">In Stock</th>
                   <th className="text-center px-4 py-2.5 w-52">Quick Adjust</th>
                   <th className="text-center px-4 py-2.5 w-44">Manual</th>
-                  <th className="text-center px-4 py-2.5">Reorder</th>
+
                 </tr>
               </thead>
               <tbody>
@@ -298,17 +287,6 @@ function InventoryPage() {
                           />
                           <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => applyManualAdj(m.id)}>Apply</Button>
                         </div>
-                      </td>
-                      <td className="px-4 py-2.5 text-center">
-                        <Button
-                          size="sm"
-                          variant={isLow ? "default" : "ghost"}
-                          className="h-7 text-xs"
-                          onClick={() => { addToOrder(m); setTab("orders"); }}
-                        >
-                          <ShoppingCart className="h-3 w-3 mr-1" />
-                          Order
-                        </Button>
                       </td>
                     </tr>
                   );

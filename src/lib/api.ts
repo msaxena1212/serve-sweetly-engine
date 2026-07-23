@@ -4,7 +4,7 @@ import {
   menuItems, categories, tables, orders, orderItems, inventory,
   stations, tableSections, paymentMethods, taxSlabs, systemConfig,
   suppliers, purchaseOrders, purchaseOrderItems, shifts, refunds, users,
-  recipeBom, inventoryLedger
+  recipeBom, inventoryLedger, reservations
 } from './db/schema';
 import { eq, and, desc } from 'drizzle-orm';
 import { getSessionServer } from './auth-rpc';
@@ -98,16 +98,16 @@ export const getTablesFn = createServerFn({ method: 'GET' })
     const session = await getSessionServer();
     if (!session) throw new Error('Unauthorized');
 
-    let tQuery = db.select().from(tables);
-    let sQuery = db.select().from(tableSections);
+    let allTables;
+    let secs;
 
     if (data.branchId) {
-      tQuery = db.select().from(tables).where(eq(tables.branchId, data.branchId));
-      sQuery = db.select().from(tableSections).where(eq(tableSections.branchId, data.branchId));
+      allTables = await db.select().from(tables).where(eq(tables.branchId, data.branchId));
+      secs = await db.select().from(tableSections).where(eq(tableSections.branchId, data.branchId));
+    } else {
+      allTables = await db.select().from(tables);
+      secs = await db.select().from(tableSections);
     }
-
-    const allTables = await tQuery;
-    const secs = await sQuery;
 
   return allTables.map(t => ({
     id: t.id.toString(),
@@ -131,7 +131,7 @@ export const createOrderFn = createServerFn({ method: 'POST' })
       type: data.type,
       customerName: data.customerName,
       branchId: data.branchId,
-      tableId: data.tableId ? parseInt(data.tableId) : null,
+      tableId: data.tableId || null,
       status: 'open',
       taxPct: (data.taxPct ?? 0).toString(),
       discountPct: (data.discountPct ?? 0).toString(),
@@ -1037,4 +1037,78 @@ export const upsertInventoryItemFn = createServerFn({ method: 'POST' })
       branchId: data.branchId || 'br-1',
     }).returning();
     return { id: row.id.toString() };
+  });
+// ──────────────────────────────────────────────────────────────
+// RESERVATION APIS
+// ──────────────────────────────────────────────────────────────
+
+export const getTopWaitlistFn = createServerFn({ method: 'GET' })
+  .validator((data: { branchId: string }) => data)
+  .handler(async ({ data }) => {
+    const session = await getSessionServer();
+    if (!session) throw new Error('Unauthorized');
+
+    const res = await db.select().from(reservations).where(
+      and(
+        eq(reservations.branchId, data.branchId),
+        eq(reservations.status, 'waiting'),
+        eq(reservations.type, 'waitlist')
+      )
+    ).orderBy(reservations.createdAt).limit(1);
+    
+    return res[0] || null;
+  });
+
+export const getReservationsFn = createServerFn({ method: 'GET' })
+  .validator((data: { branchId?: string, _t?: number }) => data)
+  .handler(async ({ data }) => {
+    const session = await getSessionServer();
+    if (!session) throw new Error('Unauthorized');
+
+    const res = await db.select().from(reservations).where(
+      and(
+        eq(reservations.branchId, data.branchId),
+        eq(reservations.status, 'waiting')
+      )
+    ).orderBy(reservations.createdAt);
+    
+    return res;
+  });
+
+export const createReservationFn = createServerFn({ method: 'POST' })
+  .validator((data: { branchId: string; type: string; customerName: string; customerPhone: string; pax: number; reservationTime?: string; tableId?: string; notes?: string }) => data)
+  .handler(async ({ data }) => {
+    const session = await getSessionServer();
+    if (!session) throw new Error('Unauthorized');
+
+    const newRes = await db.insert(reservations).values({
+      branchId: data.branchId,
+      type: data.type,
+      status: 'waiting',
+      customerName: data.customerName,
+      customerPhone: data.customerPhone,
+      pax: data.pax,
+      reservationTime: data.reservationTime ?? null,
+      tableId: data.tableId ?? null,
+      notes: data.notes ?? null,
+    }).returning();
+
+    return newRes[0];
+  });
+
+export const updateReservationStatusFn = createServerFn({ method: 'POST' })
+  .validator((data: { id: number; status: string; tableId?: string }) => data)
+  .handler(async ({ data }) => {
+    const session = await getSessionServer();
+    if (!session) throw new Error('Unauthorized');
+
+    const valuesToUpdate: any = { status: data.status };
+    if (data.tableId !== undefined) valuesToUpdate.tableId = data.tableId;
+
+    const updated = await db.update(reservations)
+      .set(valuesToUpdate)
+      .where(eq(reservations.id, data.id))
+      .returning();
+
+    return updated[0];
   });

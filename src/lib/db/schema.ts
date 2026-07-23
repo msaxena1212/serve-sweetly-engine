@@ -73,7 +73,7 @@ export const tables = pgTable('tables', {
 
 export const orders = pgTable('orders', {
   id: serial('id').primaryKey(),
-  tableId: integer('table_id').references(() => tables.id),
+  tableId: text('table_id'),
   type: text('type').notNull(), // 'dine-in', 'takeaway'
   customerName: text('customer_name'),
   customerPhone: text('customer_phone'),
@@ -172,5 +172,19 @@ export const inventoryLedger = pgTable('inventory_ledger', {
   referenceId: text('reference_id'), // Order ID, Purchase Order ID, etc.
   quantityChange: decimal('quantity_change', { precision: 10, scale: 3 }).notNull(), // Positive for in, negative for out
   runningBalance: decimal('running_balance', { precision: 10, scale: 3 }).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const reservations = pgTable('reservations', {
+  id: serial('id').primaryKey(),
+  branchId: text('branch_id').default('br-1').notNull(),
+  type: text('type').notNull(), // 'waitlist', 'advance'
+  status: text('status').default('waiting').notNull(), // 'waiting', 'seated', 'cancelled', 'no-show'
+  customerName: text('customer_name').notNull(),
+  customerPhone: text('customer_phone').notNull(),
+  pax: integer('pax').notNull(),
+  reservationTime: text('reservation_time'), // "HH:MM" for advance, null for waitlist
+  tableId: text('table_id'),
+  notes: text('notes'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
