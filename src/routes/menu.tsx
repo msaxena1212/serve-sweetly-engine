@@ -35,6 +35,7 @@ function MenuPage() {
     station: stations[0] || "Kitchen", 
     available: true, stock: 0,
     taxSlabId: ''
+  });
 
   const addItem = async () => {
     if (!draft.name.trim() || draft.price <= 0) return;
