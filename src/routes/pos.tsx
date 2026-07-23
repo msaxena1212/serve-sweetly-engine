@@ -26,8 +26,11 @@ export const Route = createFileRoute("/pos")({
     }
   },
   loader: async () => {
-    const shiftData = await getShiftStatusFn({ data: { branchId: 'br-1' } });
-    const reservations = await getReservationsFn({ data: { branchId: 'br-1' } });
+    // Run both DB calls in parallel to halve loader wait time
+    const [shiftData, reservations] = await Promise.all([
+      getShiftStatusFn({ data: { branchId: 'br-1' } }),
+      getReservationsFn({ data: { branchId: 'br-1' } }),
+    ]);
     return { shiftData, reservations };
   },
   head: () => ({
@@ -50,13 +53,14 @@ function PosPage() {
   const [showRecentBills, setShowRecentBills] = useState(false);
 
   useEffect(() => {
+    // Poll every 15s instead of 5s to reduce DB round-trips
     const id = setInterval(async () => {
       try {
         const { getReservationsFn } = await import("@/lib/api");
         const res = await getReservationsFn({ data: { branchId: 'br-1', _t: Date.now() } });
         setReservations(res);
-      } catch (e) {}
-    }, 5000);
+      } catch (e) { }
+    }, 15000);
     return () => clearInterval(id);
   }, []);
 
@@ -124,7 +128,7 @@ function PosPage() {
     const targetTable = tables.find((t) => t.id === mergeTargetId);
     if (!targetTable) return;
     const targetOrder = orders.find((o) => o.tableId === targetTable.id && o.status === "open");
-    
+
     if (!targetOrder) {
       // If target table is vacant, it acts as a transfer.
       dispatch({ type: "TRANSFER_TABLE", orderId: modalOrderId, newTableId: targetTable.id });
@@ -187,7 +191,7 @@ function PosPage() {
   };
 
   // ── Render ─────────────────────────────────────
-  
+
   if (!shiftData.isActive) {
     return (
       <div className="flex flex-col h-screen items-center justify-center bg-muted/30">
@@ -254,8 +258,8 @@ function PosPage() {
                               o
                                 ? "bg-primary/10 border-primary text-foreground"
                                 : isReserved
-                                ? "bg-amber-50 border-amber-400 text-amber-900 dark:bg-amber-900/20 dark:text-amber-300"
-                                : "bg-card border-border hover:border-primary/40"
+                                  ? "bg-amber-50 border-amber-400 text-amber-900 dark:bg-amber-900/20 dark:text-amber-300"
+                                  : "bg-card border-border hover:border-primary/40"
                             )}
                           >
                             <span className="text-lg font-semibold">{t.name}</span>
@@ -404,17 +408,17 @@ function PosPage() {
                               className="bg-card border border-amber-300 rounded-lg p-3 text-left space-y-1"
                             >
                               <div className="flex items-center justify-between">
-                                  <span className="text-xs font-bold text-amber-700 dark:text-amber-400">
-                                    {tables.find(t => t.id === r.tableId?.toString())?.name} · {r.reservationTime}
-                                  </span>
-                                  <div className="flex gap-2">
-                                    <button
-                                      onClick={() => cancelReservation(r.id)}
-                                      className="text-muted-foreground hover:text-destructive transition-colors"
-                                    >
-                                      <X className="h-3.5 w-3.5" />
-                                    </button>
-                                  </div>
+                                <span className="text-xs font-bold text-amber-700 dark:text-amber-400">
+                                  {tables.find(t => t.id === r.tableId?.toString())?.name} · {r.reservationTime}
+                                </span>
+                                <div className="flex gap-2">
+                                  <button
+                                    onClick={() => cancelReservation(r.id)}
+                                    className="text-muted-foreground hover:text-destructive transition-colors"
+                                  >
+                                    <X className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
                               </div>
                               <div className="flex items-center gap-1 text-[11px] text-foreground font-medium">
                                 <User className="h-3 w-3 text-muted-foreground" />
@@ -574,10 +578,10 @@ function PosPage() {
         </DialogContent>
       </Dialog>
 
-      <ReservationModal 
-        isOpen={showReserveModal} 
-        onClose={() => setShowReserveModal(false)} 
-        tables={tables} 
+      <ReservationModal
+        isOpen={showReserveModal}
+        onClose={() => setShowReserveModal(false)}
+        tables={tables}
         defaultTableId={reserveTableId}
       />
     </div>

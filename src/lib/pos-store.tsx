@@ -260,6 +260,10 @@ const StoreContext = createContext<Ctx | null>(null);
 import { getMenuFn, getTablesFn } from './api';
 import { useConfig } from './config-store';
 
+// Cache menu/tables for 3 minutes to avoid re-fetching on every page navigation
+const CACHE_TTL_MS = 3 * 60 * 1000;
+let lastFetchedAt = 0;
+
 export function PosStoreProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState);
   const { config } = useConfig();
@@ -268,19 +272,25 @@ export function PosStoreProvider({ children }: { children: ReactNode }) {
     try {
       const raw = typeof window !== "undefined" ? window.localStorage.getItem(STORAGE_KEY) : null;
       if (raw) dispatch({ type: "HYDRATE", payload: JSON.parse(raw) as State });
-      
-      // Fetch fresh data from DB to override local storage menu/tables
-      Promise.all([getMenuFn(), getTablesFn({ data: { branchId: config.activeBranchId } })]).then(([dbMenu, dbTables]) => {
-        dispatch({ 
-          type: "HYDRATE", 
-          payload: {
-            ...JSON.parse(raw || '{"orders": []}'),
-            orders: raw ? JSON.parse(raw).orders : [],
-            menu: dbMenu as any,
-            tables: dbTables as any
-          }
+
+      const now = Date.now();
+      const shouldRefetch = now - lastFetchedAt > CACHE_TTL_MS;
+
+      if (shouldRefetch) {
+        // Fetch fresh data from DB to override local storage menu/tables
+        Promise.all([getMenuFn(), getTablesFn({ data: { branchId: config.activeBranchId } })]).then(([dbMenu, dbTables]) => {
+          lastFetchedAt = Date.now();
+          dispatch({ 
+            type: "HYDRATE", 
+            payload: {
+              ...JSON.parse(raw || '{"orders": []}'),
+              orders: raw ? JSON.parse(raw).orders : [],
+              menu: dbMenu as any,
+              tables: dbTables as any
+            }
+          });
         });
-      });
+      }
     } catch {}
   }, [config.activeBranchId]);
 
