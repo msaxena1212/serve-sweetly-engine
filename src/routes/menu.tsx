@@ -27,16 +27,14 @@ function MenuPage() {
   const { config } = useConfig();
   const cats = config.categories.filter(c => c.active).map(c => c.name);
   const stations = config.stations.filter(s => s.active).map(s => s.name);
+  const taxSlabs = config.taxSlabs.filter(t => t.active);
   
   const [draft, setDraft] = useState<MenuItem>({ 
     id: "", name: "", price: 0, 
     category: cats[0] || "Mains", 
     station: stations[0] || "Kitchen", 
-    available: true, stock: 0 
-  });
-  
-  const [bomModalOpen, setBomModalOpen] = useState(false);
-  const [activeMenuItem, setActiveMenuItem] = useState<MenuItem | null>(null);
+    available: true, stock: 0,
+    taxSlabId: ''
 
   const addItem = async () => {
     if (!draft.name.trim() || draft.price <= 0) return;

@@ -69,9 +69,15 @@ export function OrderPanel({ order }: { order: Order }) {
         <div className="mt-3 pt-3 border-t space-y-1 text-sm">
           <Row label="Subtotal" value={fmtMoney(totals.subtotal)} />
           <Row label={`Tax (${order.taxPct}%)`} value={fmtMoney(totals.tax)} />
+          {totals.paid > 0 && (
+            <>
+              <Row label="Paid" value={fmtMoney(totals.paid)} />
+              <Row label="Balance" value={fmtMoney(totals.balance)} />
+            </>
+          )}
           <div className="flex items-center justify-between pt-1 border-t font-semibold text-base">
-            <span>Total</span>
-            <span className="text-primary">{fmtMoney(totals.total)}</span>
+            <span>{totals.paid > 0 ? "Balance Due" : "Total"}</span>
+            <span className="text-primary">{fmtMoney(totals.paid > 0 ? totals.balance : totals.total)}</span>
           </div>
         </div>
 
@@ -110,7 +116,7 @@ export function OrderPanel({ order }: { order: Order }) {
             disabled={order.items.length === 0}
             onClick={() => setShowPayment(true)}
           >
-            <CreditCard /> Charge {fmtMoney(totals.total)}
+            <CreditCard /> Charge {fmtMoney(totals.paid > 0 ? totals.balance : totals.total)}
           </Button>
         </div>
       </Card>

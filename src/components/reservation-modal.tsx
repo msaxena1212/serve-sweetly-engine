@@ -16,7 +16,7 @@ interface ReservationModalProps {
   onClose: () => void;
   tables: any[];
   defaultTableId?: string;
-  onSuccess?: () => void;
+  onSuccess?: () => void | Promise<void>;
 }
 
 export function ReservationModal({ isOpen, onClose, tables, defaultTableId, onSuccess }: ReservationModalProps) {
@@ -78,7 +78,7 @@ export function ReservationModal({ isOpen, onClose, tables, defaultTableId, onSu
         toast.success(`Message Sent: "Hello ${name}, your table (${table?.name}) is confirmed for ${time}."`, { duration: 5000 });
       }
 
-      onSuccess?.();
+      await onSuccess?.();
       router.invalidate();
       onClose();
 

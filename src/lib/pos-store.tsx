@@ -11,6 +11,7 @@ export interface MenuItem {
   station: Station;
   available: boolean;
   stock: number; // simplistic inventory
+  taxSlabId?: string; // optional tax slab identifier
 }
 
 export interface OrderItem {
@@ -22,6 +23,13 @@ export interface OrderItem {
   station: Station;
   status: "new" | "sent" | "preparing" | "ready" | "served";
   notes?: string;
+}
+
+export interface OrderPayment {
+  id: string;
+  amount: number;
+  method: string;
+  createdAt: number;
 }
 
 export type OrderType = "dine-in" | "takeaway";
@@ -37,6 +45,7 @@ export interface Order {
   createdAt: number;
   closedAt?: number;
   paymentMethod?: string;
+  payments?: OrderPayment[];
   discountPct: number;
   taxPct: number;
 }
@@ -99,6 +108,15 @@ const seedTables: Table[] = [
 
 const initialState: State = { menu: seedMenu, tables: seedTables, orders: [] };
 
+function calculateOrderTotal(items: OrderItem[], discountPct: number, taxPct: number) {
+  const subtotal = items.reduce((s, i) => s + i.price * i.qty, 0);
+  const discount = subtotal * (discountPct / 100);
+  const taxable = Math.max(0, subtotal - discount);
+  const tax = taxable * (taxPct / 100);
+  const total = taxable + tax;
+  return { subtotal, discount, tax, total };
+}
+
 type Action =
   | { type: "HYDRATE"; payload: State }
   | { type: "CREATE_ORDER"; payload: Order }
@@ -107,6 +125,8 @@ type Action =
   | { type: "REMOVE_ITEM"; orderId: string; itemId: string }
   | { type: "SEND_KOT"; orderId: string }
   | { type: "ADVANCE_ITEM"; orderId: string; itemId: string }
+  | { type: "PARTIAL_PAYMENT"; orderId: string; method: string; discountPct: number; amount: number }
+  | { type: "SPLIT_PAYMENT"; orderId: string; discountPct: number; payments: Array<{ method: string; amount: number }>; closeOrder: boolean }
   | { type: "PAY"; orderId: string; method: string; discountPct: number }
   | { type: "VOID_ORDER"; orderId: string }
   | { type: "UPSERT_MENU"; item: MenuItem }
@@ -189,12 +209,87 @@ function reducer(state: State, action: Action): State {
         ),
       };
     }
+    case "PARTIAL_PAYMENT":
+      return {
+        ...state,
+        orders: state.orders.map((o) =>
+          o.id === action.orderId
+            ? {
+                ...o,
+                paymentMethod: action.method,
+                discountPct: action.discountPct,
+                payments: [
+                  ...(o.payments ?? []),
+                  {
+                    id: `pay-${Date.now()}`,
+                    amount: action.amount,
+                    method: action.method,
+                    createdAt: Date.now(),
+                  },
+                ],
+              }
+            : o,
+        ),
+      };
+    case "SPLIT_PAYMENT": {
+      const now = Date.now();
+      return {
+        ...state,
+        orders: state.orders.map((o) =>
+          o.id === action.orderId
+            ? {
+                ...o,
+                status: action.closeOrder ? "paid" : o.status,
+                paymentMethod: "split",
+                discountPct: action.discountPct,
+                payments: [
+                  ...(o.payments ?? []),
+                  ...action.payments.map((payment, index) => ({
+                    id: `pay-${now}-${index}`,
+                    amount: payment.amount,
+                    method: payment.method,
+                    createdAt: now,
+                  })),
+                ],
+                closedAt: action.closeOrder ? now : o.closedAt,
+              }
+            : o,
+        ),
+        menu: action.closeOrder
+          ? state.menu.map((m) => {
+              const order = state.orders.find((o) => o.id === action.orderId);
+              if (!order) return m;
+              const used = order.items.filter((i) => i.menuItemId === m.id).reduce((s, i) => s + i.qty, 0);
+              return used ? { ...m, stock: Math.max(0, m.stock - used) } : m;
+            })
+          : state.menu,
+      };
+    }
     case "PAY":
       return {
         ...state,
         orders: state.orders.map((o) =>
           o.id === action.orderId
-            ? { ...o, status: "paid", paymentMethod: action.method, discountPct: action.discountPct, closedAt: Date.now() }
+            ? {
+                ...o,
+                status: "paid",
+                paymentMethod: action.method,
+                discountPct: action.discountPct,
+                payments: [
+                  ...(o.payments ?? []),
+                  {
+                    id: `pay-${Date.now()}`,
+                    amount: Math.max(
+                      0,
+                      calculateOrderTotal(o.items, action.discountPct, o.taxPct).total -
+                        (o.payments ?? []).reduce((sum, payment) => sum + payment.amount, 0),
+                    ),
+                    method: action.method,
+                    createdAt: Date.now(),
+                  },
+                ],
+                closedAt: Date.now(),
+              }
             : o,
         ),
         menu: state.menu.map((m) => {
@@ -252,7 +347,7 @@ interface Ctx extends State {
   dispatch: React.Dispatch<Action>;
   openOrderForTable: (tableId: string) => Promise<Order>;
   openTakeawayOrder: (customerName: string) => Promise<Order>;
-  getOrderTotals: (order: Order) => { subtotal: number; discount: number; tax: number; total: number };
+  getOrderTotals: (order: Order) => { subtotal: number; discount: number; tax: number; total: number; paid: number; balance: number };
 }
 
 const StoreContext = createContext<Ctx | null>(null);
@@ -353,11 +448,9 @@ export function PosStoreProvider({ children }: { children: ReactNode }) {
       return order;
     };
     const getOrderTotals = (order: Order) => {
-      const subtotal = order.items.reduce((s, i) => s + i.price * i.qty, 0);
-      const discount = subtotal * (order.discountPct / 100);
-      const tax = (subtotal - discount) * (order.taxPct / 100);
-      const total = subtotal - discount + tax;
-      return { subtotal, discount, tax, total };
+      const totals = calculateOrderTotal(order.items, order.discountPct, order.taxPct);
+      const paid = (order.payments ?? []).reduce((sum, payment) => sum + payment.amount, 0);
+      return { ...totals, paid, balance: Math.max(0, totals.total - paid) };
     };
     return { ...state, dispatch, openOrderForTable, openTakeawayOrder, getOrderTotals };
   }, [state, config.billing]);

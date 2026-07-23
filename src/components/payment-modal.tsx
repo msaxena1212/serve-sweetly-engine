@@ -22,20 +22,28 @@ export function PaymentModal({ order, onClose }: PaymentModalProps) {
   const [methodId, setMethodId] = useState<string>(activeMethods[0]?.id || "pm-1");
   const [discount, setDiscount] = useState(order.discountPct);
   const [cashTendered, setCashTendered] = useState("");
+  const [paymentMode, setPaymentMode] = useState<"full" | "partial">("full");
+  const [partialAmount, setPartialAmount] = useState("");
   const [paid, setPaid] = useState(false);
+  const [paymentResult, setPaymentResult] = useState<{ amount: number; partial: boolean } | null>(null);
 
   const selectedMethod = activeMethods.find(m => m.id === methodId);
   const isCash = selectedMethod?.type === "cash";
 
   const totals = getOrderTotals({ ...order, discountPct: discount });
-  const change = isCash && cashTendered ? parseFloat(cashTendered) - totals.total : 0;
-  const cashValid = !isCash || (parseFloat(cashTendered || "0") >= totals.total);
+  const balanceDue = Math.max(0, totals.balance);
+  const requestedAmount = paymentMode === "partial" ? Number(partialAmount || 0) : balanceDue;
+  const amountToCollect = Math.min(balanceDue, Math.max(0, requestedAmount));
+  const isPartialPayment = amountToCollect > 0 && amountToCollect < balanceDue - 0.01;
+  const change = isCash && cashTendered ? parseFloat(cashTendered) - amountToCollect : 0;
+  const amountValid = amountToCollect > 0;
+  const cashValid = !isCash || (parseFloat(cashTendered || "0") >= amountToCollect);
 
   // Quick cash buttons
   const quickAmounts = [
-    Math.ceil(totals.total / 100) * 100,
-    Math.ceil(totals.total / 500) * 500,
-    Math.ceil(totals.total / 1000) * 1000,
+    Math.ceil(amountToCollect / 100) * 100,
+    Math.ceil(amountToCollect / 500) * 500,
+    Math.ceil(amountToCollect / 1000) * 1000,
   ].filter((v, i, arr) => arr.indexOf(v) === i).slice(0, 3);
 
   const [showInvoice, setShowInvoice] = useState(false);
@@ -43,7 +51,21 @@ export function PaymentModal({ order, onClose }: PaymentModalProps) {
   const paidTotal = showInvoice ? totals.total : 0;
 
   const handlePay = async () => {
+    if (!amountValid) {
+      toast.error("Enter a valid payment amount.");
+      return;
+    }
+
+    if (isPartialPayment) {
+      dispatch({ type: "PARTIAL_PAYMENT", orderId: order.id, method: methodId, discountPct: discount, amount: amountToCollect });
+      setPaymentResult({ amount: amountToCollect, partial: true });
+      setPaid(true);
+      setTimeout(onClose, 1200);
+      return;
+    }
+
     dispatch({ type: "PAY", orderId: order.id, method: methodId, discountPct: discount });
+    setPaymentResult({ amount: amountToCollect, partial: false });
     setPaid(true);
 
     try {
@@ -78,12 +100,17 @@ export function PaymentModal({ order, onClose }: PaymentModalProps) {
   if (paid) {
     return (
       <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center">
-        <div className="bg-card rounded-2xl p-10 flex flex-col items-center gap-4 shadow-xl">
+        <div className="bg-card rounded-2xl p-10 flex flex-row items-center gap-4 shadow-xl">
           <div className="h-16 w-16 rounded-full bg-green-500/20 flex items-center justify-center">
             <Check className="h-8 w-8 text-green-500" />
           </div>
-          <div className="text-xl font-bold">Payment Confirmed</div>
-          <div className="text-muted-foreground">{fmtMoney(totals.total)} · {selectedMethod?.name.toUpperCase()}</div>
+          <div className="text-xl font-bold">{paymentResult?.partial ? "Partial Payment Recorded" : "Payment Confirmed"}</div>
+          <div className="text-muted-foreground">{fmtMoney(paymentResult?.amount ?? amountToCollect)} - {selectedMethod?.name.toUpperCase()}</div>
+          {paymentResult?.partial && (
+            <div className="text-sm font-semibold text-primary">
+              Balance Due: {fmtMoney(Math.max(0, balanceDue - paymentResult.amount))}
+            </div>
+          )}
           {isCash && change > 0 && (
             <div className="text-2xl font-bold text-green-600">Change: {fmtMoney(change)}</div>
           )}
@@ -106,7 +133,7 @@ export function PaymentModal({ order, onClose }: PaymentModalProps) {
           </button>
         </div>
 
-        <div className="p-6 space-y-5">
+        <div className="p-6 space-x-4">
           {/* Totals */}
           <div className="bg-muted/50 rounded-xl p-4 space-y-1.5 text-sm">
             <div className="flex justify-between text-muted-foreground">
@@ -125,8 +152,62 @@ export function PaymentModal({ order, onClose }: PaymentModalProps) {
             <div className="flex justify-between text-muted-foreground">
               <span>Tax ({order.taxPct}%)</span><span>{fmtMoney(totals.tax)}</span>
             </div>
+            {totals.paid > 0 && (
+              <>
+                <div className="flex justify-between text-muted-foreground pt-1.5 border-t">
+                  <span>Already Paid</span><span>{fmtMoney(totals.paid)}</span>
+                </div>
+                <div className="flex justify-between font-semibold">
+                  <span>Balance Due</span><span>{fmtMoney(balanceDue)}</span>
+                </div>
+              </>
+            )}
             <div className="flex justify-between font-bold text-base pt-1.5 border-t">
               <span>Total</span><span className="text-primary text-xl">{fmtMoney(totals.total)}</span>
+            </div>
+          </div>
+
+          {/* Amount */}
+          <div>
+            <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">Payment Amount</div>
+            <div className="grid grid-cols-2 gap-2 mb-3">
+              <button
+                onClick={() => setPaymentMode("full")}
+                className={`py-2 rounded-xl border-2 text-sm font-medium transition-all ${
+                  paymentMode === "full" ? "border-primary bg-primary/5 text-primary" : "border-border hover:border-primary/40"
+                }`}
+              >
+                Full Balance
+              </button>
+              <button
+                onClick={() => setPaymentMode("partial")}
+                className={`py-2 rounded-xl border-2 text-sm font-medium transition-all ${
+                  paymentMode === "partial" ? "border-primary bg-primary/5 text-primary" : "border-border hover:border-primary/40"
+                }`}
+              >
+                Partial
+              </button>
+            </div>
+            {paymentMode === "partial" && (
+              <Input
+                type="number"
+                min={0}
+                max={balanceDue}
+                placeholder={`Max. ${fmtMoney(balanceDue)}`}
+                value={partialAmount}
+                onChange={(e) => setPartialAmount(e.target.value)}
+                className="text-lg h-11"
+              />
+            )}
+            <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
+              <div className="rounded-lg bg-muted/50 p-3">
+                <div className="text-xs text-muted-foreground">Collecting Now</div>
+                <div className="font-bold">{fmtMoney(amountToCollect)}</div>
+              </div>
+              <div className="rounded-lg bg-muted/50 p-3">
+                <div className="text-xs text-muted-foreground">Remaining After</div>
+                <div className="font-bold">{fmtMoney(Math.max(0, balanceDue - amountToCollect))}</div>
+              </div>
             </div>
           </div>
 
@@ -159,7 +240,7 @@ export function PaymentModal({ order, onClose }: PaymentModalProps) {
               <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">Cash Tendered</div>
               <Input
                 type="number"
-                placeholder={`Min. ${fmtMoney(totals.total)}`}
+                placeholder={`Min. ${fmtMoney(amountToCollect)}`}
                 value={cashTendered}
                 onChange={(e) => setCashTendered(e.target.value)}
                 className="text-lg h-11"
@@ -193,11 +274,11 @@ export function PaymentModal({ order, onClose }: PaymentModalProps) {
         <div className="px-6 pb-6">
           <Button
             className="w-full h-12 text-base font-semibold"
-            disabled={!cashValid}
+            disabled={!amountValid || !cashValid}
             onClick={handlePay}
           >
             <Check className="h-5 w-5 mr-2" />
-            Confirm {selectedMethod?.name.toUpperCase()} · {fmtMoney(totals.total)}
+            {isPartialPayment ? "Record" : "Confirm"} {selectedMethod?.name.toUpperCase()} - {fmtMoney(amountToCollect)}
           </Button>
         </div>
       </div>

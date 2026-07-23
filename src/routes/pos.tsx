@@ -1,5 +1,5 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
-import { useState, useEffect } from "react";
+import { useCallback, useState, useEffect } from "react";
 import { usePos } from "@/lib/pos-store";
 import { OrderPanel } from "@/components/order-panel";
 import { MenuPicker } from "@/components/menu-picker";
@@ -46,23 +46,30 @@ export const Route = createFileRoute("/pos")({
 function PosPage() {
   const router = useRouter();
   const loaderData = Route.useLoaderData();
+  const { shiftData } = loaderData;
   const [reservations, setReservations] = useState(loaderData.reservations);
   const { tables, orders, openOrderForTable, dispatch } = usePos();
   const { config } = useConfig();
   const [selectedTable, setSelectedTable] = useState<string | null>(null);
   const [showRecentBills, setShowRecentBills] = useState(false);
 
+  const refreshReservations = useCallback(async () => {
+    const res = await getReservationsFn({ data: { branchId: 'br-1', _t: Date.now() } });
+    setReservations(res);
+  }, []);
+
   useEffect(() => {
-    // Poll every 15s instead of 5s to reduce DB round-trips
+    setReservations(loaderData.reservations);
+  }, [loaderData.reservations]);
+
+  useEffect(() => {
     const id = setInterval(async () => {
       try {
-        const { getReservationsFn } = await import("@/lib/api");
-        const res = await getReservationsFn({ data: { branchId: 'br-1', _t: Date.now() } });
-        setReservations(res);
+        await refreshReservations();
       } catch (e) { }
-    }, 15000);
+    }, 5000);
     return () => clearInterval(id);
-  }, []);
+  }, [refreshReservations]);
 
   // Modals state
   const [modalOrderId, setModalOrderId] = useState<string | null>(null);
@@ -164,6 +171,7 @@ function PosPage() {
   const cancelReservation = async (id: number) => {
     try {
       await updateReservationStatusFn({ data: { id, status: 'cancelled' } });
+      setReservations((current) => current.filter((r) => r.id !== id));
       toast.success("Reservation cancelled.");
       router.invalidate();
     } catch {
@@ -174,8 +182,10 @@ function PosPage() {
   const executeSeat = async () => {
     if (!seatReservationId || !seatTableId) return;
     try {
-      await updateReservationStatusFn({ data: { id: seatReservationId, status: 'seated', tableId: parseInt(seatTableId) } });
+      await updateReservationStatusFn({ data: { id: seatReservationId, status: 'seated', tableId: seatTableId } });
       await openOrderForTable(seatTableId);
+      setReservations((current) => current.filter((r) => r.id !== seatReservationId));
+      setSelectedTable(seatTableId);
       toast.success("Guest seated successfully.");
       setShowSeatModal(false);
       router.invalidate();
@@ -583,6 +593,7 @@ function PosPage() {
         onClose={() => setShowReserveModal(false)}
         tables={tables}
         defaultTableId={reserveTableId}
+        onSuccess={refreshReservations}
       />
     </div>
   );
