@@ -36,6 +36,8 @@ function MenuPage() {
     available: true, stock: 0,
     taxSlabId: ''
   });
+  const [activeMenuItem, setActiveMenuItem] = useState(null);
+  const [bomModalOpen, setBomModalOpen] = useState(false);
 
   const addItem = async () => {
     if (!draft.name.trim() || draft.price <= 0) return;
