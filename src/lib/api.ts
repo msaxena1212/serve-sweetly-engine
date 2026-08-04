@@ -8,6 +8,7 @@ import {
 } from './db/schema';
 import { eq, and, desc } from 'drizzle-orm';
 import { getSessionServer } from './auth-rpc';
+import { supabase } from './supabase';
 
 // ──────────────────────────────────────────────────────────────
 // MENU APIS
