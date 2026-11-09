@@ -24,7 +24,8 @@ Write a short report with these sections:
 1. Demand: the items to expect most over the forecast period, and any rising or falling items.
 2. Ingredient consumption: what is being used, and any gaps in recipes.
 3. Purchase list: exact quantities to order, from purchaseRecommendations with recommendedOrderQty > 0. Give the unit and the estimated cost where it is known.
-4. Risks and caveats: small sample sizes, missing recipes, low stock.
+4. Profitability: gross profit and margin, the lowest-margin dishes, the price advice (suggested price to reach the target margin), and any ingredient cost rises in ingredientCostTrend.
+5. Risks and caveats: small sample sizes, missing recipes, low stock, and dishes sold without a recipe cost.
 Keep it under 350 words. Use plain bullet points.`;
 
 function getOllamaKeys(): string[] {
@@ -102,6 +103,14 @@ export const getAiAnalysisFn = createServerFn({ method: 'POST' })
       risingItems: insights.itemForecast.filter((i) => i.trend === 'rising').slice(0, 5),
       fallingItems: insights.itemForecast.filter((i) => i.trend === 'falling').slice(0, 5),
       categorySales: insights.categorySales,
+      profitability: {
+        summary: insights.profitability.summary,
+        coverage: insights.profitability.coverage,
+        lowestMarginDishes: [...insights.profitability.byDish].filter((d) => d.units > 0 && d.marginPct !== null).sort((a, b) => (a.marginPct ?? 0) - (b.marginPct ?? 0)).slice(0, 8),
+        topProfitDishes: insights.profitability.byDish.slice(0, 8),
+        priceAdvice: insights.profitability.priceAdvice.slice(0, 10),
+        ingredientCostTrend: insights.profitability.costTrend,
+      },
       purchaseRecommendations: insights.purchaseRecommendations.filter((p) => p.recommendedOrderQty > 0 || p.priority !== 'none').slice(0, 25),
       coverage: insights.coverage,
     };

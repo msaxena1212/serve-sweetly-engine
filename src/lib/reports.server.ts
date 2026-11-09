@@ -5,6 +5,7 @@ import { sql, type SQL } from 'drizzle-orm';
 import { db } from './db/db';
 import { getSessionServer } from './auth-rpc';
 import { EXTRA_BUILDERS } from './reports-extra';
+import { computeProfitability } from './profit.server';
 
 export type ColType = 'text' | 'int' | 'money' | 'pct' | 'date';
 export type ReportColumn = { key: string; label: string; type: ColType };
@@ -375,7 +376,71 @@ const BASE_BUILDERS: Record<string, (from: string, to: string) => Promise<Built>
 
   'Balances Sheets': async () => unavailable('A balance sheet needs a general ledger and chart of accounts, which the app does not have yet.'),
   'Trial Balance': async () => unavailable('A trial balance needs a general ledger and chart of accounts, which the app does not have yet.'),
-  'Profit & Margin': async () => unavailable('Menu items do not store a cost price yet, so margin cannot be calculated.'),
+  'Profit & Margin': async (from, to) => {
+    const p = await computeProfitability(from, to);
+    return {
+      available: true,
+      message: p.coverage.note ?? 'Profit = revenue − recipe cost at the last purchase price. Margin = profit ÷ revenue.',
+      columns: [
+        { key: 'dish', label: 'Dish', type: 'text' }, { key: 'category', label: 'Category', type: 'text' },
+        { key: 'units', label: 'Units', type: 'int' }, { key: 'revenue', label: 'Revenue', type: 'money' },
+        { key: 'cost', label: 'Food cost', type: 'money' }, { key: 'profit', label: 'Gross profit', type: 'money' },
+        { key: 'marginPct', label: 'Margin', type: 'pct' },
+      ],
+      rows: p.byDish.map((d) => ({ dish: d.dish, category: d.category, units: d.units, revenue: d.revenue, cost: d.cost, profit: d.profit, marginPct: d.marginPct })),
+      summary: [
+        { label: 'Revenue', value: p.summary.revenue, type: 'money' },
+        { label: 'Food cost', value: p.summary.foodCost, type: 'money' },
+        { label: 'Gross profit', value: p.summary.grossProfit, type: 'money' },
+        { label: 'Gross margin', value: p.summary.marginPct, type: 'pct' },
+      ],
+    };
+  },
+  'Profit by Day': async (from, to) => {
+    const p = await computeProfitability(from, to);
+    return {
+      available: true,
+      message: 'Revenue, food cost and profit for each day with paid sales.',
+      columns: [
+        { key: 'day', label: 'Date', type: 'date' }, { key: 'units', label: 'Units', type: 'int' },
+        { key: 'revenue', label: 'Revenue', type: 'money' }, { key: 'cost', label: 'Food cost', type: 'money' },
+        { key: 'profit', label: 'Gross profit', type: 'money' }, { key: 'marginPct', label: 'Margin', type: 'pct' },
+      ],
+      rows: p.byDay,
+      summary: [
+        { label: 'Gross profit', value: p.summary.grossProfit, type: 'money' },
+        { label: 'Gross margin', value: p.summary.marginPct, type: 'pct' },
+      ],
+    };
+  },
+  'Profit by Category': async (from, to) => {
+    const p = await computeProfitability(from, to);
+    return {
+      available: true,
+      message: 'Revenue, food cost and profit grouped by menu category.',
+      columns: [
+        { key: 'category', label: 'Category', type: 'text' }, { key: 'units', label: 'Units', type: 'int' },
+        { key: 'revenue', label: 'Revenue', type: 'money' }, { key: 'cost', label: 'Food cost', type: 'money' },
+        { key: 'profit', label: 'Gross profit', type: 'money' }, { key: 'marginPct', label: 'Margin', type: 'pct' },
+      ],
+      rows: p.byCategory,
+      summary: [{ label: 'Categories', value: p.byCategory.length, type: 'int' }],
+    };
+  },
+  'Price Advice': async (from, to) => {
+    const p = await computeProfitability(from, to);
+    return {
+      available: true,
+      message: `Suggested price = unit cost ÷ (1 − ${Math.round(p.target * 100)}%), rounded up to the next ₹5. Only dishes below that price are listed.`,
+      columns: [
+        { key: 'dish', label: 'Dish', type: 'text' }, { key: 'price', label: 'Current price', type: 'money' },
+        { key: 'unitCost', label: 'Unit cost', type: 'money' }, { key: 'targetPrice', label: 'Suggested price', type: 'money' },
+        { key: 'priceGap', label: 'Increase', type: 'money' }, { key: 'marginPct', label: 'Current margin', type: 'pct' },
+      ],
+      rows: p.priceAdvice.map((d) => ({ dish: d.dish, price: d.price, unitCost: d.unitCost, targetPrice: d.targetPrice, priceGap: d.priceGap, marginPct: d.marginPct })),
+      summary: [{ label: 'Dishes to review', value: p.priceAdvice.length, type: 'int' }],
+    };
+  },
   'Invoice & Receivables': async () => unavailable('Credit sales and receivables are not tracked yet. All sales are settled at the till.'),
   'Product Sales Tax': async () => unavailable('Tax is not recorded per item yet. Use the Sales Tax Report for order-level tax.'),
 };

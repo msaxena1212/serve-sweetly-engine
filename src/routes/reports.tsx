@@ -86,6 +86,9 @@ const REPORT_CATEGORIES = {
     { title: "Price List", description: "View products price list.", icon: CreditCard },
   ],
   Financials: [
+    { title: "Profit by Day", description: "Revenue, food cost and gross profit for each day.", icon: TrendingUp },
+    { title: "Profit by Category", description: "Gross profit and margin by menu category.", icon: BarChart3 },
+    { title: "Price Advice", description: "Dishes priced below the target margin, with a suggested price.", icon: DollarSign },
     { title: "Expense Reports", description: "View expenses reports.", icon: Banknote },
     { title: "Balances Sheets", description: "Balance Sheet report.", icon: FileText },
     { title: "Trial Balance", description: "Trial Balance report.", icon: Percent },

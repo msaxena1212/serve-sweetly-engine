@@ -2,6 +2,7 @@
 // The numbers here are the source of truth. The AI layer (ai.ts) only explains them.
 import { sql } from 'drizzle-orm';
 import { db } from './db/db';
+import { computeProfitability } from './profit.server';
 
 type Row = Record<string, unknown>;
 const num = (v: unknown) => Number(v ?? 0);
@@ -232,6 +233,7 @@ export async function buildInsights(opts: InsightOptions = {}) {
     .sort((a, b) => a.marginPct - b.marginPct);
 
   return {
+    profitability: await computeProfitability(from, to),
     generatedAt: new Date().toISOString(),
     menuEngineering,
     marginAlerts,

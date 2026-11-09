@@ -5,6 +5,7 @@ import { sql, eq, and } from 'drizzle-orm';
 import { db } from './db/db';
 import { getSessionServer } from './auth-rpc';
 import { resolveCustomer } from './customers.server';
+import { computeProfitability } from './profit.server';
 import { menuItems, categories, tables, orders, orderItems, reservations, paymentMethods } from './db/schema';
 
 type Pending = { kind: 'book_table' | 'waitlist' | 'seat_walkin' | 'checkout' | 'order_items'; params: Record<string, any>; summary: string };
@@ -147,6 +148,9 @@ async function snapshot() {
   const lowStock = (await db.execute(sql`
     select name, quantity::float as on_hand, min_quantity::float as minimum from inventory
     where quantity <= min_quantity order by name limit 10`)) as unknown as { name: string; on_hand: number; minimum: number }[];
+  // Profitability for the last 7 days, from the same calculation as the Profit report.
+  const [range] = (await db.execute(sql`select (current_date - 6)::text as f, current_date::text as t`)) as unknown as { f: string; t: string }[];
+  const profit7 = await computeProfitability(range.f, range.t);
   const reports = {
     ordersToday: Number(today?.orders_today ?? 0),
     salesToday: Math.round(Number(today?.sales_today ?? 0) * 100) / 100,
@@ -157,6 +161,14 @@ async function snapshot() {
     lowStock,
     topItemsToday: topToday,
     paymentsToday,
+    profitLast7Days: {
+      revenue: profit7.summary.revenue,
+      foodCost: profit7.summary.foodCost,
+      grossProfit: profit7.summary.grossProfit,
+      grossMarginPct: profit7.summary.marginPct,
+      lowestMarginDishes: profit7.byDish.filter((d) => d.units > 0 && d.marginPct !== null).sort((a, b) => (a.marginPct ?? 0) - (b.marginPct ?? 0)).slice(0, 5).map((d) => ({ dish: d.dish, marginPct: d.marginPct })),
+      note: profit7.coverage.note,
+    },
   };
   // Stock, recipes and purchasing, for questions about ingredients and orders.
   const inventory = (await db.execute(sql`

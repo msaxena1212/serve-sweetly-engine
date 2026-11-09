@@ -9,6 +9,8 @@ import { toast } from "sonner";
 import type { Insights } from "@/lib/ai-analytics";
 import { usePager, Pager } from "@/components/pager";
 import { RichText } from "@/components/rich-text";
+import { InfoTip } from "@/components/insight-charts";
+import { ProfitTrendChart, CategoryProfitChart, MarginByDishChart, CostTrendChart } from "@/components/profit-charts";
 import { DailyRevenueChart, UnitsPerDayChart, ForecastChart, CategoryChart, IngredientChart, OrderQtyChart, MenuScatter } from "@/components/insight-charts";
 
 export const Route = createFileRoute("/ai")({
@@ -38,6 +40,7 @@ const TABS = [
   { id: "ingredients", label: "Ingredients & purchasing" },
   { id: "menu", label: "Dish Profitability & Popularity" },
   { id: "trends", label: "Sales trends" },
+  { id: "profit", label: "Profitability" },
   { id: "summary", label: "Daily summary" },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
@@ -196,6 +199,8 @@ function AiInsightsPage() {
   const anomalyPager = usePager(data?.anomalies ?? []);
   const reorderPager = usePager(data?.reorderAlerts ?? []);
   const catPager = usePager(data?.categorySales ?? []);
+  const profitPager = usePager(data?.profitability.byDish ?? []);
+  const advicePager = usePager(data?.profitability.priceAdvice ?? []);
 
   return (
     <div className="space-y-6 p-6 animate-page">
@@ -525,6 +530,63 @@ function AiInsightsPage() {
                       <tbody>{anomalyPager.rows.map((a) => <tr key={a.day} className="border-t"><td className="py-2">{a.day}</td><td className="text-right">{money(a.revenue)}</td><td>{a.flag}</td></tr>)}</tbody>
                     </table>
                     <Pager p={anomalyPager} />
+                  </>
+                )}
+              </Card>
+            </>
+          )}
+
+          {tab === "profit" && (
+            <>
+              <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                <Card className="p-4 lift"><div className="text-xs text-muted-foreground">Revenue</div><div className="text-2xl font-semibold tabular-nums">{money(data.profitability.summary.revenue)}</div><div className="text-xs text-muted-foreground">paid sales in the period</div></Card>
+                <Card className="p-4 lift"><div className="text-xs text-muted-foreground">Food cost</div><div className="text-2xl font-semibold tabular-nums">{money(data.profitability.summary.foodCost)}</div><div className="text-xs text-muted-foreground">{data.profitability.summary.foodCostPct}% of revenue</div></Card>
+                <Card className="p-4 lift"><div className="text-xs text-muted-foreground">Gross profit</div><div className="text-2xl font-semibold tabular-nums">{money(data.profitability.summary.grossProfit)}</div><div className="text-xs text-muted-foreground">revenue minus food cost</div></Card>
+                <Card className="p-4 lift"><div className="text-xs text-muted-foreground">Gross margin</div><div className="text-2xl font-semibold tabular-nums">{data.profitability.summary.marginPct}%</div><div className="text-xs text-muted-foreground">target {Math.round(data.profitability.target * 100)}%</div></Card>
+              </div>
+              {data.profitability.coverage.note && <div className="rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">{data.profitability.coverage.note}</div>}
+              <div className="rounded border bg-muted/40 p-3 text-xs text-muted-foreground">
+                Food cost only. Labour, rent, utilities and wastage are not included, so this is gross margin, not net profit.
+              </div>
+              <div className="grid gap-4 lg:grid-cols-2"><ProfitTrendChart profit={data.profitability} /><CategoryProfitChart profit={data.profitability} /></div>
+              <div className="grid gap-4 lg:grid-cols-2"><MarginByDishChart profit={data.profitability} /><CostTrendChart profit={data.profitability} /></div>
+              <Card className="p-4">
+                <div className="mb-3 flex items-start justify-between gap-2">
+                  <div>
+                    <h2 className="font-semibold">Profit by dish</h2>
+                    <p className="text-xs text-muted-foreground">Sorted by gross profit.</p>
+                  </div>
+                  <InfoTip text="Units sold × price gives revenue. Units sold × recipe cost gives food cost. Recipe cost is the sum of each ingredient's quantity × its last purchase price. Profit = revenue − food cost. Margin = profit ÷ revenue." />
+                </div>
+                {data.profitability.byDish.length === 0 ? <p className="text-sm text-muted-foreground">No paid sales in this period.</p> : (
+                  <>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead className="text-left text-xs text-muted-foreground"><tr><th className="py-2">Dish</th><th>Category</th><th className="text-right">Units</th><th className="text-right">Revenue</th><th className="text-right">Food cost</th><th className="text-right">Profit</th><th className="text-right">Margin</th></tr></thead>
+                        <tbody>{profitPager.rows.map((d) => <tr key={d.dishId} className="border-t"><td className="py-2">{d.dish}{!d.hasRecipe && <span className="ml-2 text-xs text-muted-foreground">no recipe</span>}</td><td className="text-muted-foreground">{d.category}</td><td className="text-right">{d.units}</td><td className="text-right">{money(d.revenue)}</td><td className="text-right">{money(d.cost)}</td><td className="text-right font-semibold">{money(d.profit)}</td><td className="text-right">{d.marginPct === null ? "—" : `${d.marginPct}%`}</td></tr>)}</tbody>
+                      </table>
+                    </div>
+                    <Pager p={profitPager} />
+                  </>
+                )}
+              </Card>
+              <Card className="p-4">
+                <div className="mb-3 flex items-start justify-between gap-2">
+                  <div>
+                    <h2 className="font-semibold">Price advice</h2>
+                    <p className="text-xs text-muted-foreground">Dishes whose margin is below the target.</p>
+                  </div>
+                  <InfoTip text={`Suggested price = unit cost ÷ (1 − ${Math.round(data.profitability.target * 100)}%), rounded up to the next ₹5. Only dishes priced below that suggestion are listed. Review before changing prices.`} />
+                </div>
+                {data.profitability.priceAdvice.length === 0 ? <p className="text-sm text-muted-foreground">Every dish sold meets the target margin.</p> : (
+                  <>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead className="text-left text-xs text-muted-foreground"><tr><th className="py-2">Dish</th><th className="text-right">Current price</th><th className="text-right">Unit cost</th><th className="text-right">Suggested</th><th className="text-right">Increase</th><th className="text-right">Margin now</th></tr></thead>
+                        <tbody>{advicePager.rows.map((d) => <tr key={d.dishId} className="border-t"><td className="py-2">{d.dish}</td><td className="text-right">{money(d.price)}</td><td className="text-right">{money(d.unitCost)}</td><td className="text-right font-semibold">{money(d.targetPrice)}</td><td className="text-right">+{money(d.priceGap)}</td><td className="text-right">{d.marginPct === null ? "—" : `${d.marginPct}%`}</td></tr>)}</tbody>
+                      </table>
+                    </div>
+                    <Pager p={advicePager} />
                   </>
                 )}
               </Card>
