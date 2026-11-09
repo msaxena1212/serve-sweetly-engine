@@ -65,7 +65,7 @@ export function ReservationModal({ isOpen, onClose, tables, defaultTableId, onSu
           customerPhone: phone.trim(),
           pax: parseInt(pax) || 2,
           reservationTime: tab === "advance" ? time : undefined,
-          tableId: tab === "advance" && tableId ? parseInt(tableId) : undefined,
+          tableId: tab === "advance" && tableId ? tableId : undefined,
           notes: note.trim()
         }
       });

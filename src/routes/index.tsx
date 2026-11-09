@@ -31,6 +31,7 @@ export const Route = createFileRoute("/")({
 
 function Dashboard() {
   const router = useRouter();
+  const { session } = Route.useRouteContext();
   const { reservations } = Route.useLoaderData();
   const { orders, tables, menu, getOrderTotals } = usePos();
   const [shiftOpen, setShiftOpen] = useState(() => {
@@ -85,18 +86,18 @@ function Dashboard() {
   };
 
   const stats = [
-    { label: "Revenue (today)", value: fmtMoney(revenue), icon: TrendingUp, accent: "text-primary" },
-    { label: "Orders paid", value: paidToday.length.toString(), icon: Receipt },
-    { label: "Tables occupied", value: `${occupiedTables}/${tables.length}`, icon: Utensils },
-    { label: "Kitchen queue", value: kitchenQueue.toString(), icon: ChefHat },
+    { label: "Revenue (today)", value: fmtMoney(revenue), icon: TrendingUp, tint: "bg-primary/10 text-primary" },
+    { label: "Orders paid", value: paidToday.length.toString(), icon: Receipt, tint: "bg-emerald-500/10 text-emerald-600" },
+    { label: "Tables occupied", value: `${occupiedTables}/${tables.length}`, icon: Utensils, tint: "bg-sky-500/10 text-sky-600" },
+    { label: "Kitchen queue", value: kitchenQueue.toString(), icon: ChefHat, tint: "bg-amber-500/10 text-amber-600" },
   ];
 
   return (
-    <div className="p-6 lg:p-8 space-y-6">
+    <div className="p-6 lg:p-8 space-y-6 animate-page">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">
-            {today.getHours() < 12 ? "Good morning" : today.getHours() < 17 ? "Good afternoon" : "Good evening"}, Chef 👋
+            {today.getHours() < 12 ? "Good morning" : today.getHours() < 17 ? "Good afternoon" : "Good evening"}, {session?.name?.split(" ")[0] ?? "there"} 👋
           </h1>
           <p className="text-sm text-muted-foreground flex items-center gap-1.5 mt-0.5">
             <Clock className="h-3.5 w-3.5" />
@@ -124,24 +125,59 @@ function Dashboard() {
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {stats.map((s) => (
-          <Card key={s.label} className="p-4">
+          <Card key={s.label} className="p-4 lift">
             <div className="flex items-center justify-between">
               <span className="text-xs uppercase tracking-wide text-muted-foreground">{s.label}</span>
-              <s.icon className={`h-4 w-4 ${s.accent ?? "text-muted-foreground"}`} />
+              <span className={`kpi-icon ${s.tint}`}><s.icon className="h-4 w-4" /></span>
             </div>
-            <div className="mt-2 text-2xl font-semibold">{s.value}</div>
+            <div className="mt-3 text-2xl font-semibold tabular-nums">{s.value}</div>
           </Card>
         ))}
       </div>
 
-      <div className="grid lg:grid-cols-3 gap-4">
-        <Card className="p-5 lg:col-span-2">
+      <div className="grid gap-4 md:grid-cols-3">
+        <Link to="/pos" className="group rounded-xl border bg-card p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+          <div className="flex items-center justify-between">
+            <span className="kpi-icon h-10 w-10 bg-primary/10 text-primary"><Utensils className="h-5 w-5" /></span>
+            <span className="text-xs text-muted-foreground">{occupiedTables} of {tables.length} tables occupied</span>
+          </div>
+          <div className="mt-4 text-lg font-semibold">Dine-In</div>
+          <div className="text-sm text-muted-foreground">Seat guests, take orders, send to the kitchen and settle bills.</div>
+          <div className="mt-3 text-sm font-medium text-primary group-hover:underline">Open dine-in POS →</div>
+        </Link>
+        <Link to="/takeaway" className="group rounded-xl border bg-card p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+          <div className="flex items-center justify-between">
+            <span className="kpi-icon h-10 w-10 bg-emerald-500/10 text-emerald-600"><ShoppingBag className="h-5 w-5" /></span>
+            <span className="text-xs text-muted-foreground">{takeawayQueue} open takeaway</span>
+          </div>
+          <div className="mt-4 text-lg font-semibold">Takeaway</div>
+          <div className="text-sm text-muted-foreground">Take a pickup or delivery order with the customer's name and mobile number.</div>
+          <div className="mt-3 text-sm font-medium text-emerald-700 group-hover:underline">Start takeaway →</div>
+        </Link>
+        <button type="button" onClick={() => setShowResModal(true)} className="group rounded-xl border bg-card p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+          <div className="flex items-center justify-between">
+            <span className="kpi-icon h-10 w-10 bg-amber-500/10 text-amber-600"><CalendarClock className="h-5 w-5" /></span>
+            <span className="text-xs text-muted-foreground">{reservations.filter((r) => r.type === "waitlist").length} waiting · {reservations.filter((r) => r.type === "advance").length} booked</span>
+          </div>
+          <div className="mt-4 text-lg font-semibold">Reserve or Waitlist</div>
+          <div className="text-sm text-muted-foreground">Book a table for a later time, or add a walk-in to the queue.</div>
+          <div className="mt-3 text-sm font-medium text-amber-700 group-hover:underline">Add a booking →</div>
+        </button>
+      </div>
+
+      <div className="grid lg:grid-cols-2 gap-4">
+        <Card className="p-5">
           <div className="flex items-center justify-between mb-3">
             <h2 className="font-semibold">Open orders</h2>
             <Link to="/pos" className="text-xs text-primary hover:underline">Manage</Link>
           </div>
           {openOrders.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No active orders.</p>
+            <div className="flex flex-col items-center gap-2 py-8 text-center">
+              <span className="kpi-icon bg-primary/10 text-primary h-10 w-10"><Utensils className="h-5 w-5" /></span>
+              <p className="font-medium">No open orders right now</p>
+              <p className="text-sm text-muted-foreground">Start a dine-in order or a takeaway to see it here.</p>
+              <Button asChild size="sm" className="mt-2"><Link to="/pos">Open POS</Link></Button>
+            </div>
           ) : (
             <div className="divide-y">
               {openOrders.slice(0, 8).map((o) => {
@@ -188,53 +224,8 @@ function Dashboard() {
               </ul>
             )}
           </Card>
-          
-          <Card className="p-5">
-            <div className="flex items-center gap-2 mb-3 text-amber-600">
-              <Users className="h-4 w-4" />
-              <h2 className="font-semibold">Waitlist Queue</h2>
-            </div>
-            {reservations.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No active reservations or waitlist.</p>
-            ) : (
-              <div className="space-y-3">
-                {reservations.map((r, i) => {
-                  const waitMins = Math.floor((now - new Date(r.createdAt).getTime()) / 60000);
-                  return (
-                    <div key={r.id} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg border">
-                      <div>
-                        <div className="text-sm font-semibold flex items-center gap-2">
-                          <span className="w-5 h-5 flex items-center justify-center bg-background rounded-full border text-xs text-muted-foreground">#{i + 1}</span>
-                          {r.customerName} <span className="text-muted-foreground font-normal text-xs">({r.pax} pax)</span>
-                        </div>
-                        <div className="text-xs text-muted-foreground mt-1 flex items-center gap-2">
-                          <Phone className="h-3 w-3" /> {r.customerPhone}
-                          {r.type === 'advance' ? (
-                            <span className="text-amber-600 font-medium ml-1">· Adv: {r.reservationTime}</span>
-                          ) : (
-                            <span className="text-primary font-medium ml-1">· Wait: {waitMins}m</span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex gap-2">
-                        {r.type === 'waitlist' && (
-                          <Button asChild variant="ghost" size="sm" className="h-7 px-2 text-green-600 hover:bg-green-600/10 hover:text-green-700">
-                            <Link to="/pos">Seat</Link>
-                          </Button>
-                        )}
-                        <Button variant="ghost" size="sm" className="h-7 px-2 text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => handleCancelReservation(r.id)}>
-                          Cancel
-                        </Button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </Card>
         </div>
       </div>
-      
       <ReservationModal 
         isOpen={showResModal} 
         onClose={() => setShowResModal(false)} 
@@ -243,4 +234,3 @@ function Dashboard() {
     </div>
   );
 }
-

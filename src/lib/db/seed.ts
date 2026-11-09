@@ -6,11 +6,11 @@ async function main() {
   
   // Seed Users
   await db.insert(users).values([
-    { name: 'Admin Owner', pin: '1234', role: 'owner' },
-    { name: 'Manager John', pin: '2345', role: 'manager' },
-    { name: 'Cashier Jane', pin: '3456', role: 'cashier' },
-    { name: 'Waiter Bob', pin: '4567', role: 'waiter' },
-    { name: 'Chef Mike', pin: '5678', role: 'kitchen' },
+    { name: 'Admin Owner', pin: '1010', role: 'owner' },
+    { name: 'Manager John', pin: '1010', role: 'manager' },
+    { name: 'Cashier Jane', pin: '1010', role: 'cashier' },
+    { name: 'Waiter Bob', pin: '1010', role: 'waiter' },
+    { name: 'Chef Mike', pin: '1010', role: 'kitchen' },
   ]);
 
   // Seed Categories

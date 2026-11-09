@@ -1,24 +1,26 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
   LayoutDashboard, Utensils, ShoppingBag, ChefHat,
-  BookOpen, Boxes, BarChart3, Settings2, ShoppingCart, Wallet, GitBranch, ChevronDown
+  BookOpen, Boxes, BarChart3, Settings2, ShoppingCart, Wallet, GitBranch, ChevronDown, Sparkles, Menu
 } from "lucide-react";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { useConfig } from "@/lib/config-store";
 import { useState, useRef, useEffect } from "react";
 
-const OPS_ITEMS = [
+export const OPS_ITEMS = [
   { to: "/",         label: "Dashboard",     icon: LayoutDashboard, exact: true },
   { to: "/pos",      label: "Dine-In POS",   icon: Utensils },
   { to: "/takeaway", label: "Takeaway",       icon: ShoppingBag },
   { to: "/kds",      label: "Kitchen Display",icon: ChefHat },
 ];
 
-const MGMT_ITEMS = [
+export const MGMT_ITEMS = [
   { to: "/menu",      label: "Menu",       icon: BookOpen },
   { to: "/inventory", label: "Inventory",  icon: Boxes },
   { to: "/purchases", label: "Purchases",  icon: ShoppingCart },
   { to: "/reports",   label: "Reports",    icon: BarChart3 },
+  { to: "/ai",        label: "AI Insights", icon: Sparkles },
   { to: "/masters",   label: "Masters",    icon: Settings2 },
   { to: "/shift",     label: "Shift",      icon: Wallet },
 ];
@@ -60,7 +62,7 @@ export function AppSidebar() {
   };
 
   return (
-    <aside className="hidden md:flex w-60 flex-col border-r bg-sidebar text-sidebar-foreground shrink-0">
+    <aside className="hidden md:flex w-60 flex-col border-r bg-sidebar text-sidebar-foreground shrink-0 sticky top-0 h-screen self-start">
       {/* Branding */}
       <div className="px-5 py-5 border-b border-sidebar-border">
         <div className="flex items-center gap-2">
@@ -137,5 +139,61 @@ export function AppSidebar() {
         <div className="mt-0.5 text-[10px]">{config.restaurant.phone}</div>
       </div>
     </aside>
+  );
+}
+// Phones: the desktop sidebar is hidden below md, so a top bar opens the same navigation as a sheet.
+export function MobileTopBar() {
+  const [open, setOpen] = useState(false);
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const { config } = useConfig();
+
+  const MobileLink = ({ to, label, icon: Icon, exact }: { to: string; label: string; icon: typeof LayoutDashboard; exact?: boolean }) => {
+    const active = exact ? pathname === to : pathname.startsWith(to);
+    return (
+      <Link
+        to={to as "/"}
+        onClick={() => setOpen(false)}
+        className={cn(
+          "flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition-colors",
+          active ? "bg-sidebar-primary text-sidebar-primary-foreground font-medium" : "hover:bg-sidebar-accent",
+        )}
+      >
+        <Icon className="h-4 w-4 shrink-0" />
+        {label}
+      </Link>
+    );
+  };
+
+  return (
+    <div className="md:hidden sticky top-0 z-40 flex items-center justify-between gap-3 border-b bg-sidebar text-sidebar-foreground px-4 py-3">
+      <div className="flex items-center gap-2 min-w-0">
+        <div className="h-8 w-8 shrink-0 rounded-md bg-sidebar-primary text-sidebar-primary-foreground grid place-items-center font-bold">
+          {config.restaurant.name[0]}
+        </div>
+        <div className="text-sm font-semibold truncate">{config.restaurant.name} POS</div>
+      </div>
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetTrigger asChild>
+          <button aria-label="Open menu" className="p-2 -mr-2 rounded-md hover:bg-sidebar-accent">
+            <Menu className="h-5 w-5" />
+          </button>
+        </SheetTrigger>
+        <SheetContent side="left" className="w-72 p-0 bg-sidebar text-sidebar-foreground border-sidebar-border">
+          <SheetHeader className="px-4 py-4 border-b border-sidebar-border">
+            <SheetTitle className="text-sidebar-foreground text-base">Navigate</SheetTitle>
+          </SheetHeader>
+          <nav className="p-2 space-y-4 overflow-y-auto">
+            <div>
+              <div className="px-3 mb-1 text-[10px] uppercase tracking-widest opacity-50 font-semibold">Operations</div>
+              {OPS_ITEMS.map((it) => <MobileLink key={it.to} {...it} />)}
+            </div>
+            <div>
+              <div className="px-3 mb-1 text-[10px] uppercase tracking-widest opacity-50 font-semibold">Management</div>
+              {MGMT_ITEMS.map((it) => <MobileLink key={it.to} {...it} />)}
+            </div>
+          </nav>
+        </SheetContent>
+      </Sheet>
+    </div>
   );
 }

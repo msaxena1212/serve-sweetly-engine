@@ -19,6 +19,8 @@ import {
   FileText,
   Database,
   DollarSign,
+  Sparkles,
+  ShoppingCart,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -34,14 +36,21 @@ export const Route = createFileRoute("/reports")({
   head: () => ({
     meta: [
       { title: "Reports — Forno" },
-      { name: "description", content: "Browse sales, purchase, inventory and financial reports." },
+      { name: "description", content: "Browse sales, purchase, inventory, AI insights and financial reports." },
     ],
   }),
   component: ReportsPage,
 });
 
-const TAB_ORDER = ["Sales", "Purchases", "Inventory", "Financials"] as const;
+const TAB_ORDER = ["AI Insights", "Sales", "Operations", "Purchases", "Inventory", "Financials"] as const;
 const REPORT_CATEGORIES = {
+  "AI Insights": [
+    { title: "AI Demand Forecast", description: "Trend-adjusted run rate predictions for dish quantities & projected sales revenue.", icon: Sparkles, to: "/ai?tab=demand" },
+    { title: "AI Purchasing & Ingredient Depletion", description: "Recipe-driven raw material consumption forecast and automated purchase recommendations.", icon: ShoppingCart, to: "/ai?tab=ingredients" },
+    { title: "Dish Profitability & Popularity Matrix", description: "Classifies dishes into Champions, Crowd Pleasers, Hidden Gems, and Review based on margin vs popularity.", icon: Star, to: "/ai?tab=menu" },
+    { title: "AI Sales Anomalies & Trends", description: "Statistical Z-score detection identifying days with abnormal revenue spikes or drops.", icon: TrendingUp, to: "/ai?tab=trends" },
+    { title: "AI Executive Daily Summary", description: "Natural language LLM daily business briefing and operational risk analysis.", icon: FileText, to: "/ai?tab=summary" },
+  ],
   Sales: [
     { title: "Sales Summary", description: "View sales summary over a period.", icon: Receipt },
     { title: "Product Sales Summary", description: "View sales by products over a period.", icon: ShoppingBag },
@@ -81,12 +90,36 @@ const REPORT_CATEGORIES = {
     { title: "Balances Sheets", description: "Balance Sheet report.", icon: FileText },
     { title: "Trial Balance", description: "Trial Balance report.", icon: Percent },
   ],
+  Operations: [
+    { title: "Sales by Week", description: "Sales and orders grouped by week.", icon: Receipt },
+    { title: "Sales by Month", description: "Monthly sales with growth against the previous month.", icon: TrendingUp },
+    { title: "Bottom Selling Products", description: "Items with the fewest units sold in the period.", icon: Package },
+    { title: "Sales by Channel", description: "Dine-in and takeaway sales. Delivery is not a separate order type yet.", icon: ShoppingBag },
+    { title: "Discounts and Voids", description: "Discounts given, and voided or cancelled orders.", icon: Percent },
+    { title: "Staff Voids and Discounts", description: "Voids and discounts per staff member.", icon: Users },
+    { title: "Repeat Customer Rate", description: "How many customers came back, and their value.", icon: Users },
+    { title: "Reservations and Waitlist", description: "Bookings, seated guests and no-show rate.", icon: Clock },
+    { title: "Ingredient Cost per Dish", description: "Recipe cost, selling price and margin for each dish.", icon: DollarSign },
+    { title: "Dish Profitability & Popularity", description: "Stars, plowhorses, puzzles and dogs, from sales and margin.", icon: Star },
+    { title: "Waste and Shrinkage", description: "Damage, theft, expiry and wastage, with value lost.", icon: Archive },
+    { title: "Supplier Price Changes", description: "Purchase price changes by supplier and product.", icon: TrendingUp },
+    { title: "Shift Cash Variance", description: "Expected against counted cash for each shift.", icon: Banknote },
+    { title: "Daily Cash-Up", description: "Money received by payment method each day, less refunds.", icon: CreditCard },
+    { title: "Sales Anomalies", description: "Days whose sales are unusually high or low.", icon: BarChart3 },
+    { title: "Preparation Time by Station", description: "Kitchen preparation times per station.", icon: Clock },
+    { title: "KOT Delays", description: "Delays between sending and completing a KOT.", icon: Clock },
+    { title: "Items Cancelled or Remade", description: "Items cancelled or remade in the kitchen.", icon: Archive },
+    { title: "Tips Report", description: "Tips collected at payment.", icon: Banknote },
+    { title: "Loyalty Tier Usage", description: "Customers by loyalty tier.", icon: Star },
+    { title: "Purchase Order Lead Time", description: "Days from purchase order to goods received.", icon: Clock },
+    { title: "Delivery Channel", description: "Sales through delivery partners.", icon: ShoppingBag },
+  ],
 };
 
 type ReportCategory = keyof typeof REPORT_CATEGORIES;
 
 function ReportsPage() {
-  const [tab, setTab] = useState<ReportCategory>("Sales");
+  const [tab, setTab] = useState<ReportCategory>("AI Insights");
   const [search, setSearch] = useState("");
 
   const reports = REPORT_CATEGORIES[tab];
@@ -144,7 +177,17 @@ function ReportsPage() {
           </Card>
         ) : (
           filteredReports.map((report) => (
-            <Card key={report.title} onClick={() => window.location.assign(`/report?name=${encodeURIComponent(report.title)}`)} className="p-5 hover:shadow-lg transition-shadow group cursor-pointer">
+            <Card
+              key={report.title}
+              onClick={() => {
+                if ('to' in report && (report as any).to) {
+                  window.location.assign((report as any).to);
+                } else {
+                  window.location.assign(`/report?name=${encodeURIComponent(report.title)}`);
+                }
+              }}
+              className="p-5 hover:shadow-lg transition-shadow group cursor-pointer"
+            >
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <h2 className="font-semibold text-sm">{report.title}</h2>

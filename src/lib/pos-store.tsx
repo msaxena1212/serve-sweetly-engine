@@ -346,7 +346,7 @@ function reducer(state: State, action: Action): State {
 interface Ctx extends State {
   dispatch: React.Dispatch<Action>;
   openOrderForTable: (tableId: string) => Promise<Order>;
-  openTakeawayOrder: (customerName: string) => Promise<Order>;
+  openTakeawayOrder: (customerName: string, customerPhone?: string) => Promise<Order>;
   getOrderTotals: (order: Order) => { subtotal: number; discount: number; tax: number; total: number; paid: number; balance: number };
 }
 
@@ -423,12 +423,12 @@ export function PosStoreProvider({ children }: { children: ReactNode }) {
       dispatch({ type: "CREATE_ORDER", payload: order });
       return order;
     };
-    const openTakeawayOrder = async (customerName: string) => {
+    const openTakeawayOrder = async (customerName: string, customerPhone?: string) => {
       // Create in DB first, use real DB ID
       let dbId = `o-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       try {
         const { createOrderFn } = await import('./api');
-        const res = await createOrderFn({ data: { type: 'takeaway', customerName, branchId: config.activeBranchId } });
+        const res = await createOrderFn({ data: { type: 'takeaway', customerName, customerPhone, branchId: config.activeBranchId } });
         dbId = res.id;
       } catch (err) {
         console.error('Failed to save takeaway order to DB', err);

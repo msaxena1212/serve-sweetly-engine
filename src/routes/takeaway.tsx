@@ -80,7 +80,7 @@ function TakeawayPage() {
     }
 
     const token = getNextToken(config.takeaway.tokenMax);
-    const order = await openTakeawayOrder(name.trim()) as any;
+    const order = await openTakeawayOrder(name.trim(), phone.trim()) as any;
     (order as any).__token = token;
     (order as any).__phone = phone.trim();
     setSelectedId(order.id);

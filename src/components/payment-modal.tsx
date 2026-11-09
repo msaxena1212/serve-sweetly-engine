@@ -22,8 +22,9 @@ export function PaymentModal({ order, onClose }: PaymentModalProps) {
   const [methodId, setMethodId] = useState<string>(activeMethods[0]?.id || "pm-1");
   const [discount, setDiscount] = useState(order.discountPct);
   const [cashTendered, setCashTendered] = useState("");
-  const [paymentMode, setPaymentMode] = useState<"full" | "partial">("full");
+  const [paymentMode, setPaymentMode] = useState<"full" | "partial" | "split">("full");
   const [partialAmount, setPartialAmount] = useState("");
+  const [splitCount, setSplitCount] = useState<number>(2);
   const [paid, setPaid] = useState(false);
   const [paymentResult, setPaymentResult] = useState<{ amount: number; partial: boolean } | null>(null);
 
@@ -32,7 +33,8 @@ export function PaymentModal({ order, onClose }: PaymentModalProps) {
 
   const totals = getOrderTotals({ ...order, discountPct: discount });
   const balanceDue = Math.max(0, totals.balance);
-  const requestedAmount = paymentMode === "partial" ? Number(partialAmount || 0) : balanceDue;
+  const splitAmount = Math.max(0.01, Math.round((balanceDue / Math.max(1, splitCount)) * 100) / 100);
+  const requestedAmount = paymentMode === "partial" ? Number(partialAmount || 0) : paymentMode === "split" ? splitAmount : balanceDue;
   const amountToCollect = Math.min(balanceDue, Math.max(0, requestedAmount));
   const isPartialPayment = amountToCollect > 0 && amountToCollect < balanceDue - 0.01;
   const change = isCash && cashTendered ? parseFloat(cashTendered) - amountToCollect : 0;
@@ -170,24 +172,54 @@ export function PaymentModal({ order, onClose }: PaymentModalProps) {
           {/* Amount */}
           <div>
             <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">Payment Amount</div>
-            <div className="grid grid-cols-2 gap-2 mb-3">
+            <div className="grid grid-cols-3 gap-2 mb-3">
               <button
                 onClick={() => setPaymentMode("full")}
-                className={`py-2 rounded-xl border-2 text-sm font-medium transition-all ${
+                className={`py-2 rounded-xl border-2 text-xs font-semibold transition-all ${
                   paymentMode === "full" ? "border-primary bg-primary/5 text-primary" : "border-border hover:border-primary/40"
                 }`}
               >
                 Full Balance
               </button>
               <button
+                onClick={() => setPaymentMode("split")}
+                className={`py-2 rounded-xl border-2 text-xs font-semibold transition-all ${
+                  paymentMode === "split" ? "border-primary bg-primary/5 text-primary" : "border-border hover:border-primary/40"
+                }`}
+              >
+                Split Bill
+              </button>
+              <button
                 onClick={() => setPaymentMode("partial")}
-                className={`py-2 rounded-xl border-2 text-sm font-medium transition-all ${
+                className={`py-2 rounded-xl border-2 text-xs font-semibold transition-all ${
                   paymentMode === "partial" ? "border-primary bg-primary/5 text-primary" : "border-border hover:border-primary/40"
                 }`}
               >
-                Partial
+                Custom
               </button>
             </div>
+            {paymentMode === "split" && (
+              <div className="p-3 bg-muted/40 rounded-xl space-y-2 mb-2 text-xs">
+                <div className="flex items-center justify-between font-medium">
+                  <span>Split equally among guests:</span>
+                  <span className="font-bold text-primary">{fmtMoney(splitAmount)} / guest</span>
+                </div>
+                <div className="grid grid-cols-4 gap-1.5">
+                  {[2, 3, 4, 5].map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => setSplitCount(n)}
+                      className={`py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+                        splitCount === n ? "bg-primary text-primary-foreground border-primary" : "bg-background hover:bg-muted"
+                      }`}
+                    >
+                      {n} Ways
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             {paymentMode === "partial" && (
               <Input
                 type="number"

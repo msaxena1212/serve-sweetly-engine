@@ -13,7 +13,8 @@ import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { PosStoreProvider } from "@/lib/pos-store";
 import { ConfigStoreProvider } from "@/lib/config-store";
-import { AppSidebar } from "@/components/app-sidebar";
+import { AppSidebar, MobileTopBar } from "@/components/app-sidebar";
+import { AiChat } from "@/components/ai-chat";
 import { Toaster } from "@/components/ui/sonner";
 
 function NotFoundComponent() {
@@ -132,17 +133,21 @@ function RootComponent() {
   const { queryClient, session } = Route.useRouteContext();
   const router = useRouter();
   const isLoginPage = router.state.location.pathname === '/login';
+  const isCustomerRoute = router.state.location.pathname.startsWith('/table');
+  const showStaffUi = !isLoginPage && !isCustomerRoute && session;
 
   return (
     <QueryClientProvider client={queryClient}>
       <ConfigStoreProvider>
         <PosStoreProvider>
           <div className="flex min-h-screen w-full bg-background text-foreground">
-            {!isLoginPage && session && <AppSidebar />}
+            {showStaffUi && <AppSidebar />}
             <main className="flex-1 min-w-0 flex flex-col">
+              {showStaffUi && <MobileTopBar />}
               <Outlet />
             </main>
           </div>
+          {showStaffUi && <AiChat />}
           <Toaster />
         </PosStoreProvider>
       </ConfigStoreProvider>

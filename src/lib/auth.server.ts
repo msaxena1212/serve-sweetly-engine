@@ -20,7 +20,7 @@ export async function signToken(payload: UserSession) {
     .sign(JWT_SECRET);
 }
 
-async function verifyToken(token: string): Promise<UserSession | null> {
+export async function verifyToken(token: string): Promise<UserSession | null> {
   try {
     const { payload } = await jwtVerify(token, JWT_SECRET);
     return payload as unknown as UserSession;
@@ -72,7 +72,7 @@ export async function loginServer(pin: string) {
 
   createSessionCookie(token);
 
-  return { success: true, role: user.role };
+  return { success: true, role: user.role, token, user: { id: user.id, name: user.name, role: user.role } };
 }
 
 export async function logoutServer() {

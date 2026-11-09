@@ -36,7 +36,7 @@ function MenuPage() {
     available: true, stock: 0,
     taxSlabId: ''
   });
-  const [activeMenuItem, setActiveMenuItem] = useState(null);
+  const [activeMenuItem, setActiveMenuItem] = useState<MenuItem | null>(null);
   const [bomModalOpen, setBomModalOpen] = useState(false);
 
   const addItem = async () => {

@@ -3,11 +3,11 @@ import { usePos, fmtMoney } from "@/lib/pos-store";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Minus, AlertTriangle, ShoppingCart, Package, X, Check, TrendingDown, ClipboardCheck, Loader2 } from "lucide-react";
+import { Plus, Minus, AlertTriangle, ShoppingCart, Package, X, Check, TrendingDown, ClipboardCheck, Loader2, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { getInventoryItemsFn, physicalStockCountFn, getSuppliersFn, createPurchaseOrderFn, getInventoryLedgerFn } from "@/lib/api";
+import { getInventoryItemsFn, physicalStockCountFn, getSuppliersFn, createPurchaseOrderFn, getInventoryLedgerFn, recordWastageFn, getWastageLogsFn } from "@/lib/api";
 import { useConfig } from "@/lib/config-store";
 
 export const Route = createFileRoute("/inventory")({
@@ -51,7 +51,7 @@ function InventoryPage() {
   const { menu, dispatch } = usePos();
   const { config } = useConfig();
   const branchId = config.activeBranchId;
-  const [tab, setTab] = useState<"stock" | "orders" | "count" | "ledger">("stock");
+  const [tab, setTab] = useState<"stock" | "orders" | "count" | "ledger" | "wastage">("stock");
   const [search, setSearch] = useState("");
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -61,6 +61,47 @@ function InventoryPage() {
     items: [],
   });
   const [adjustQty, setAdjustQty] = useState<Record<string, string>>({});
+
+  // Wastage state
+  const [wasteItemId, setWasteItemId] = useState("");
+  const [wasteQty, setWasteQty] = useState("");
+  const [wasteReason, setWasteReason] = useState("Expired / Spoiled");
+  const [wasteNotes, setWasteNotes] = useState("");
+  const [wasteLoading, setWasteLoading] = useState(false);
+  const [wastageLogs, setWastageLogs] = useState<Array<{ id: string; itemName: string; unit: string; quantity: number; reason: string; createdAt: number; runningBalance: number }>>([]);
+
+  const loadWastageLogs = async () => {
+    try {
+      const logs = await getWastageLogsFn();
+      setWastageLogs(logs);
+    } catch {}
+  };
+
+  const handleRecordWastage = async () => {
+    if (!wasteItemId) { toast.error("Please select an item"); return; }
+    const qty = parseFloat(wasteQty);
+    if (!qty || qty <= 0 || isNaN(qty)) { toast.error("Please enter a valid quantity"); return; }
+
+    setWasteLoading(true);
+    try {
+      const res = await recordWastageFn({
+        data: {
+          inventoryId: wasteItemId,
+          quantity: qty,
+          reason: wasteReason,
+          notes: wasteNotes.trim(),
+        },
+      });
+      toast.success(`Recorded ${qty} wastage for ${res.itemName}`);
+      setWasteQty("");
+      setWasteNotes("");
+      loadWastageLogs();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to record wastage");
+    } finally {
+      setWasteLoading(false);
+    }
+  };
 
   // Physical count state
   const [countValues, setCountValues] = useState<Record<string, string>>({});
@@ -207,6 +248,13 @@ function InventoryPage() {
             onClick={() => setTab("ledger")}
           >
             <Package className="h-3.5 w-3.5 mr-1.5" /> Raw Materials & Ledger
+          </Button>
+          <Button
+            variant={tab === "wastage" ? "default" : "outline"}
+            size="sm"
+            onClick={() => { setTab("wastage"); loadWastageLogs(); }}
+          >
+            <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Wastage & Spoilage
           </Button>
         </div>
       </header>
@@ -604,6 +652,145 @@ function InventoryPage() {
                   ))}
                 </tbody>
               </table>
+            </Card>
+          </div>
+        </div>
+      )}
+
+      {/* WASTAGE & SPOILAGE TAB */}
+      {tab === "wastage" && (
+        <div className="space-y-6">
+          <div className="grid md:grid-cols-3 gap-6">
+            <Card className="p-5 md:col-span-1 space-y-4">
+              <div>
+                <h2 className="font-semibold text-base flex items-center gap-2">
+                  <Trash2 className="h-4 w-4 text-destructive" />
+                  Record Kitchen Wastage
+                </h2>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Log discarded, expired, or spoiled ingredients to adjust live inventory & food cost.
+                </p>
+              </div>
+
+              <div className="space-y-3 text-sm">
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground block mb-1">Select Ingredient</label>
+                  <select
+                    value={wasteItemId}
+                    onChange={(e) => setWasteItemId(e.target.value)}
+                    className="w-full h-9 rounded-md border bg-background px-3 text-sm"
+                  >
+                    <option value="">-- Choose item --</option>
+                    {dbInventory.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.name} ({item.quantity} {item.unit} available)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground block mb-1">Quantity Discarded</label>
+                  <div className="flex gap-2">
+                    <Input
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      placeholder="0.00"
+                      value={wasteQty}
+                      onChange={(e) => setWasteQty(e.target.value)}
+                      className="h-9"
+                    />
+                    <div className="h-9 px-3 border rounded-md flex items-center bg-muted text-xs font-medium">
+                      {dbInventory.find((i) => i.id === wasteItemId)?.unit || "unit"}
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground block mb-1">Reason</label>
+                  <select
+                    value={wasteReason}
+                    onChange={(e) => setWasteReason(e.target.value)}
+                    className="w-full h-9 rounded-md border bg-background px-3 text-sm"
+                  >
+                    <option value="Expired / Spoiled">Expired / Spoiled</option>
+                    <option value="Burnt / Prep Error">Burnt / Prep Error</option>
+                    <option value="Dropped / Damaged">Dropped / Damaged</option>
+                    <option value="Quality Rejection">Quality Rejection</option>
+                    <option value="Customer Return">Customer Return</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground block mb-1">Remarks / Details</label>
+                  <Input
+                    placeholder="e.g. Overheated in oven, smelled sour..."
+                    value={wasteNotes}
+                    onChange={(e) => setWasteNotes(e.target.value)}
+                    className="h-9"
+                  />
+                </div>
+
+                <Button
+                  onClick={handleRecordWastage}
+                  disabled={wasteLoading || !wasteItemId || !wasteQty}
+                  className="w-full mt-2 bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+                >
+                  {wasteLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trash2 className="h-4 w-4 mr-2" />}
+                  Record & Deduct Stock
+                </Button>
+              </div>
+            </Card>
+
+            <Card className="p-5 md:col-span-2 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="font-semibold text-base">Recent Wastage Log</h2>
+                  <p className="text-xs text-muted-foreground">Historical records of kitchen loss and inventory write-offs.</p>
+                </div>
+                <Button size="sm" variant="outline" onClick={loadWastageLogs}>Refresh</Button>
+              </div>
+
+              {wastageLogs.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground text-sm">
+                  No wastage logged recently. Use the form on the left to record spoiled or lost items.
+                </div>
+              ) : (
+                <div className="overflow-x-auto max-h-[480px]">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
+                      <tr>
+                        <th className="text-left px-3 py-2 rounded-l-md">Date</th>
+                        <th className="text-left px-3 py-2">Item</th>
+                        <th className="text-right px-3 py-2">Loss Qty</th>
+                        <th className="text-left px-3 py-2">Reason / Details</th>
+                        <th className="text-right px-3 py-2 rounded-r-md">New Balance</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {wastageLogs.map((log) => (
+                        <tr key={log.id} className="hover:bg-muted/40 transition-colors">
+                          <td className="px-3 py-2 text-xs text-muted-foreground">
+                            {new Date(log.createdAt).toLocaleDateString()} {new Date(log.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </td>
+                          <td className="px-3 py-2 font-medium">{log.itemName}</td>
+                          <td className="px-3 py-2 text-right font-semibold text-destructive">
+                            -{log.quantity} {log.unit}
+                          </td>
+                          <td className="px-3 py-2 text-xs text-muted-foreground max-w-[200px] truncate">
+                            {log.reason.replace(/^WASTE-/, '').replace(/_/g, ' ')}
+                          </td>
+                          <td className="px-3 py-2 text-right text-xs font-mono">
+                            {log.runningBalance} {log.unit}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </Card>
           </div>
         </div>

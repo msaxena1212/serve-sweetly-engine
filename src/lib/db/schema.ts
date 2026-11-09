@@ -71,13 +71,28 @@ export const tables = pgTable('tables', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
+export const customers = pgTable('customers', {
+  id: serial('id').primaryKey(),
+  fullName: text('full_name').notNull(),
+  phone: text('phone').notNull().unique(),
+  email: text('email'),
+  city: text('city'),
+  branchId: text('branch_id'),
+  loyaltyTier: text('loyalty_tier'),
+  isSample: boolean('is_sample').default(false).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
 export const orders = pgTable('orders', {
   id: serial('id').primaryKey(),
   tableId: text('table_id'),
   type: text('type').notNull(), // 'dine-in', 'takeaway'
   customerName: text('customer_name'),
+  customerId: integer('customer_id').references(() => customers.id),
   customerPhone: text('customer_phone'),
   status: text('status').default('open').notNull(), // 'open', 'completed', 'cancelled', 'void'
+  subtotal: decimal('subtotal', { precision: 12, scale: 2 }).default('0.00').notNull(),
   total: decimal('total', { precision: 10, scale: 2 }).default('0.00').notNull(),
   discountPct: decimal('discount_pct', { precision: 5, scale: 2 }).default('0.00').notNull(),
   taxPct: decimal('tax_pct', { precision: 5, scale: 2 }).default('0.00').notNull(),
@@ -92,6 +107,7 @@ export const orderItems = pgTable('order_items', {
   orderId: integer('order_id').references(() => orders.id).notNull(),
   menuItemId: integer('menu_item_id').references(() => menuItems.id).notNull(),
   quantity: integer('quantity').notNull(),
+  unitPrice: decimal('unit_price', { precision: 10, scale: 2 }).default('0.00').notNull(),
   status: text('status').default('pending').notNull(), // 'pending', 'preparing', 'ready', 'served'
   notes: text('notes'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
@@ -181,6 +197,7 @@ export const reservations = pgTable('reservations', {
   type: text('type').notNull(), // 'waitlist', 'advance'
   status: text('status').default('waiting').notNull(), // 'waiting', 'seated', 'cancelled', 'no-show'
   customerName: text('customer_name').notNull(),
+  customerId: integer('customer_id').references(() => customers.id),
   customerPhone: text('customer_phone').notNull(),
   pax: integer('pax').notNull(),
   reservationTime: text('reservation_time'), // "HH:MM" for advance, null for waitlist

@@ -4,11 +4,10 @@ import {
   menuItems, categories, tables, orders, orderItems, inventory,
   stations, tableSections, paymentMethods, taxSlabs, systemConfig,
   suppliers, purchaseOrders, purchaseOrderItems, shifts, refunds, users,
-  recipeBom, inventoryLedger, reservations
+  recipeBom, inventoryLedger, reservations, customers
 } from './db/schema';
 import { eq, and, desc } from 'drizzle-orm';
 import { getSessionServer } from './auth-rpc';
-import { supabase } from './supabase';
 
 // ──────────────────────────────────────────────────────────────
 // MENU APIS
@@ -123,14 +122,17 @@ export const getTablesFn = createServerFn({ method: 'GET' })
 // ──────────────────────────────────────────────────────────────
 
 export const createOrderFn = createServerFn({ method: 'POST' })
-  .validator((data: { type: string; tableId?: string; customerName?: string; taxPct?: number; discountPct?: number; branchId?: string }) => data)
+  .validator((data: { type: string; tableId?: string; customerName?: string; customerPhone?: string; taxPct?: number; discountPct?: number; branchId?: string }) => data)
   .handler(async ({ data }) => {
     const session = await getSessionServer();
     if (!session) throw new Error('Unauthorized');
 
+    const customerId = await (await import('./customers.server')).resolveCustomer(data.customerName, data.customerPhone, data.branchId);
     const newOrder = await db.insert(orders).values({
       type: data.type,
       customerName: data.customerName,
+      customerId,
+      customerPhone: data.customerPhone?.trim() || null,
       branchId: data.branchId,
       tableId: data.tableId || null,
       status: 'open',
@@ -142,7 +144,7 @@ export const createOrderFn = createServerFn({ method: 'POST' })
   });
 
 export const updateOrderFn = createServerFn({ method: 'POST' })
-  .validator((data: { orderId: string; status?: string; total?: string; paymentMethodId?: string }) => data)
+  .validator((data: { orderId: string; status?: string; total?: string; paymentMethodId?: string; tableId?: string }) => data)
   .handler(async ({ data }) => {
     const session = await getSessionServer();
     if (!session) throw new Error('Unauthorized');
@@ -181,6 +183,7 @@ export const updateOrderFn = createServerFn({ method: 'POST' })
         ...(data.status && { status: data.status }),
         ...(data.total && { total: data.total }),
         ...(data.paymentMethodId && { paymentMethodId: parseInt(data.paymentMethodId) }),
+        ...(data.tableId && { tableId: data.tableId }),
       })
       .where(eq(orders.id, orderId));
 
@@ -269,7 +272,7 @@ export const transferTableFn = createServerFn({ method: 'POST' })
     if (!session) throw new Error('Unauthorized');
 
     await db.update(orders)
-      .set({ tableId: parseInt(data.newTableId) })
+      .set({ tableId: data.newTableId })
       .where(eq(orders.id, parseInt(data.orderId)));
 
     return { success: true };
@@ -1066,11 +1069,9 @@ export const getReservationsFn = createServerFn({ method: 'GET' })
     const session = await getSessionServer();
     if (!session) throw new Error('Unauthorized');
 
+    const waiting = eq(reservations.status, 'waiting');
     const res = await db.select().from(reservations).where(
-      and(
-        eq(reservations.branchId, data.branchId),
-        eq(reservations.status, 'waiting')
-      )
+      data.branchId ? and(eq(reservations.branchId, data.branchId), waiting) : waiting
     ).orderBy(reservations.createdAt);
     
     return res;
@@ -1082,7 +1083,9 @@ export const createReservationFn = createServerFn({ method: 'POST' })
     const session = await getSessionServer();
     if (!session) throw new Error('Unauthorized');
 
+    const customerId = await (await import('./customers.server')).resolveCustomer(data.customerName, data.customerPhone, data.branchId);
     const newRes = await db.insert(reservations).values({
+      customerId,
       branchId: data.branchId,
       type: data.type,
       status: 'waiting',
@@ -1112,4 +1115,121 @@ export const updateReservationStatusFn = createServerFn({ method: 'POST' })
       .returning();
 
     return updated[0];
+  });
+
+// ──────────────────────────────────────────────────────────────
+// AI & INVENTORY ENHANCEMENT APIS
+// ──────────────────────────────────────────────────────────────
+
+export const createPoFromAiRecommendationsFn = createServerFn({ method: 'POST' })
+  .validator((data: { items: { inventoryId: number; qty: number; unitPrice: number | null }[]; branchId?: string }) => data)
+  .handler(async ({ data }) => {
+    const session = await getSessionServer();
+    if (!session || !['owner', 'manager'].includes(session.role)) throw new Error('Unauthorized');
+    if (!data.items.length) throw new Error('No items to order');
+
+    let sup = await db.select().from(suppliers).limit(1);
+    let supplierId: number;
+    if (!sup.length) {
+      const [newSup] = await db.insert(suppliers).values({
+        name: 'General Wholesale Supplier',
+        contactInfo: 'orders@supplier.internal',
+      }).returning();
+      supplierId = newSup.id;
+    } else {
+      supplierId = sup[0].id;
+    }
+
+    const branchId = data.branchId || 'br-1';
+    const poNumber = `PO-AI-${Date.now().toString().slice(-6)}`;
+    const total = data.items.reduce((sum, item) => sum + (item.qty * (item.unitPrice ?? 50)), 0);
+
+    const [po] = await db.insert(purchaseOrders).values({
+      supplierId,
+      branchId,
+      invoiceNumber: poNumber,
+      status: 'pending',
+      totalAmount: total.toFixed(2),
+    }).returning();
+
+    await db.insert(purchaseOrderItems).values(
+      data.items.map((item) => ({
+        purchaseOrderId: po.id,
+        inventoryId: item.inventoryId,
+        quantity: item.qty.toString(),
+        unitPrice: (item.unitPrice ?? 50).toString(),
+      }))
+    );
+
+    return { id: po.id.toString(), invoiceNumber: poNumber, total, itemsCount: data.items.length };
+  });
+
+export const recordWastageFn = createServerFn({ method: 'POST' })
+  .validator((data: { inventoryId: string; quantity: number; reason: string; notes?: string; branchId?: string }) => data)
+  .handler(async ({ data }) => {
+    const session = await getSessionServer();
+    if (!session || !['owner', 'manager', 'kitchen'].includes(session.role)) throw new Error('Unauthorized');
+    const invId = parseInt(data.inventoryId);
+    const qty = Number(data.quantity);
+    if (!invId || isNaN(invId)) throw new Error('Invalid inventory item');
+    if (!(qty > 0)) throw new Error('Quantity must be greater than zero');
+
+    const inv = await db.select().from(inventory).where(eq(inventory.id, invId)).limit(1);
+    if (!inv.length) throw new Error('Item not found in inventory');
+
+    const currentQty = parseFloat(inv[0].quantity);
+    const newQty = Math.max(0, currentQty - qty);
+
+    await db.update(inventory).set({ quantity: newQty.toString() }).where(eq(inventory.id, invId));
+    await db.insert(inventoryLedger).values({
+      inventoryId: invId,
+      transactionType: 'WASTAGE',
+      referenceId: `WASTE-${data.reason.toUpperCase().replace(/\s+/g, '_')}${data.notes ? ` (${data.notes})` : ''}`,
+      quantityChange: (-qty).toString(),
+      runningBalance: newQty.toString(),
+    });
+
+    return { success: true, newQuantity: newQty, itemName: inv[0].name };
+  });
+
+export const getWastageLogsFn = createServerFn({ method: 'GET' })
+  .handler(async () => {
+    const session = await getSessionServer();
+    if (!session) throw new Error('Unauthorized');
+
+    const logs = await db.select({
+      id: inventoryLedger.id,
+      inventoryId: inventoryLedger.inventoryId,
+      itemName: inventory.name,
+      unit: inventory.unit,
+      quantityChange: inventoryLedger.quantityChange,
+      referenceId: inventoryLedger.referenceId,
+      runningBalance: inventoryLedger.runningBalance,
+      createdAt: inventoryLedger.createdAt,
+    })
+    .from(inventoryLedger)
+    .leftJoin(inventory, eq(inventory.id, inventoryLedger.inventoryId))
+    .where(eq(inventoryLedger.transactionType, 'WASTAGE'))
+    .orderBy(desc(inventoryLedger.createdAt))
+    .limit(50);
+
+    return logs.map((l) => ({
+      id: l.id.toString(),
+      inventoryId: l.inventoryId.toString(),
+      itemName: l.itemName || 'Unknown Item',
+      unit: l.unit || 'units',
+      quantity: Math.abs(parseFloat(l.quantityChange)),
+      reason: l.referenceId || 'Unspecified',
+      runningBalance: parseFloat(l.runningBalance),
+      createdAt: l.createdAt.getTime(),
+    }));
+  });
+
+export const getCustomerProfileFn = createServerFn({ method: 'POST' })
+  .validator((data: { phoneOrName: string }) => data)
+  .handler(async ({ data }) => {
+    const session = await getSessionServer();
+    if (!session) throw new Error('Unauthorized');
+    const { getCustomerProfile } = await import('./customers.server');
+    return await getCustomerProfile(data.phoneOrName);
   });
