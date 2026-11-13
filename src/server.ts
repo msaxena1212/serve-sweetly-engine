@@ -42,8 +42,8 @@ export default {
     try {
       const url = new URL(request.url);
       if (url.pathname.startsWith("/api/v1/")) {
-        const { handleUnifiedApiRequest } = await import("./server/unified-api");
-        return await handleUnifiedApiRequest(request);
+        const { handleApiV1Request } = await import("./api/router");
+        return await handleApiV1Request(request);
       }
 
       const handler = await getServerEntry();

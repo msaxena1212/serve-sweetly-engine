@@ -2,10 +2,12 @@ import { useState } from "react";
 import { usePos, fmtMoney, type Order } from "@/lib/pos-store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { CreditCard, Banknote, Smartphone, X, Check, Wallet, Printer } from "lucide-react";
+import { CreditCard, Banknote, Smartphone, X, Check, Wallet, Printer, Receipt } from "lucide-react";
 import { useConfig } from "@/lib/config-store";
 import { getTopWaitlistFn } from "@/lib/api";
 import { toast } from "sonner";
+import { DigitalReceiptModal } from "@/fe/components/digital-receipt-modal";
+import { generateAsciiReceipt, generateHtmlReceipt } from "@/be/services/receipt.service";
 
 interface PaymentModalProps {
   order: Order;
@@ -26,6 +28,7 @@ export function PaymentModal({ order, onClose }: PaymentModalProps) {
   const [partialAmount, setPartialAmount] = useState("");
   const [splitCount, setSplitCount] = useState<number>(2);
   const [paid, setPaid] = useState(false);
+  const [showDigitalReceipt, setShowDigitalReceipt] = useState(false);
   const [paymentResult, setPaymentResult] = useState<{ amount: number; partial: boolean } | null>(null);
 
   const selectedMethod = activeMethods.find(m => m.id === methodId);
@@ -87,8 +90,6 @@ export function PaymentModal({ order, onClose }: PaymentModalProps) {
     } catch (e) {
       console.error("Failed to sync payment", e);
     }
-
-    setTimeout(onClose, 1800);
   };
 
   const handlePrint = () => {
@@ -100,14 +101,50 @@ export function PaymentModal({ order, onClose }: PaymentModalProps) {
   };
 
   if (paid) {
+    const receiptData = {
+      restaurantName: "Forno Restaurant & Cafe",
+      branchName: "Main Branch",
+      orderId: parseInt(order.id) || 0,
+      invoiceNumber: `INV-${order.id.slice(-5).toUpperCase()}`,
+      tableNumber: order.tableId || undefined,
+      orderType: order.type as "dine-in" | "takeaway",
+      customerName: order.customerName,
+      createdAt: new Date(),
+      items: order.items.map((i) => ({
+        name: i.name,
+        quantity: i.qty,
+        unitPrice: i.price,
+        totalPrice: i.price * i.qty,
+        notes: i.notes,
+      })),
+      subtotal: totals.subtotal,
+      discountPct: discount,
+      discountAmount: totals.discount,
+      taxPct: order.taxPct || 0,
+      taxAmount: totals.tax,
+      total: totals.total,
+      paymentMethod: selectedMethod?.name || "CASH",
+      tenderAmount: isCash && cashTendered ? parseFloat(cashTendered) : amountToCollect,
+      changeDue: isCash && change > 0 ? change : 0,
+    };
+
     return (
-      <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center">
-        <div className="bg-card rounded-2xl p-10 flex flex-row items-center gap-4 shadow-xl">
+      <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+        <DigitalReceiptModal
+          open={showDigitalReceipt}
+          onOpenChange={setShowDigitalReceipt}
+          receiptText={generateAsciiReceipt(receiptData)}
+          receiptHtml={generateHtmlReceipt(receiptData)}
+          orderId={order.id}
+        />
+        <div className="bg-card rounded-2xl p-8 flex flex-col items-center gap-4 shadow-xl max-w-sm w-full text-center">
           <div className="h-16 w-16 rounded-full bg-green-500/20 flex items-center justify-center">
             <Check className="h-8 w-8 text-green-500" />
           </div>
-          <div className="text-xl font-bold">{paymentResult?.partial ? "Partial Payment Recorded" : "Payment Confirmed"}</div>
-          <div className="text-muted-foreground">{fmtMoney(paymentResult?.amount ?? amountToCollect)} - {selectedMethod?.name.toUpperCase()}</div>
+          <div>
+            <div className="text-xl font-bold">{paymentResult?.partial ? "Partial Payment Recorded" : "Payment Confirmed"}</div>
+            <div className="text-muted-foreground mt-1">{fmtMoney(paymentResult?.amount ?? amountToCollect)} · {selectedMethod?.name.toUpperCase()}</div>
+          </div>
           {paymentResult?.partial && (
             <div className="text-sm font-semibold text-primary">
               Balance Due: {fmtMoney(Math.max(0, balanceDue - paymentResult.amount))}
@@ -116,6 +153,14 @@ export function PaymentModal({ order, onClose }: PaymentModalProps) {
           {isCash && change > 0 && (
             <div className="text-2xl font-bold text-green-600">Change: {fmtMoney(change)}</div>
           )}
+          <div className="flex gap-2 w-full mt-2">
+            <Button variant="outline" className="flex-1 gap-1.5" onClick={() => setShowDigitalReceipt(true)}>
+              <Receipt className="h-4 w-4" /> Digital Receipt
+            </Button>
+            <Button className="flex-1" onClick={onClose}>
+              Done
+            </Button>
+          </div>
         </div>
       </div>
     );

@@ -2,12 +2,13 @@ import { createFileRoute, redirect } from "@tanstack/react-router";
 import { type Station } from "@/lib/pos-store";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getActiveOrdersFn, getTablesFn, updateOrderItemStatusFn } from "@/lib/api";
 import { useConfig } from "@/lib/config-store";
-import { LayoutList, Ticket, CheckCheck } from "lucide-react";
+import { LayoutList, Ticket, CheckCheck, Volume2, VolumeX } from "lucide-react";
+import { playKitchenChime } from "@/fe/components/kitchen-audio";
 
 export const Route = createFileRoute("/kds")({
   beforeLoad: ({ context }) => {
@@ -29,6 +30,8 @@ const stations: ("All" | Station)[] = ["All", "Kitchen", "Tandoor", "Bar"];
 function KdsPage() {
   const [station, setStation] = useState<(typeof stations)[number]>("All");
   const [viewMode, setViewMode] = useState<"item" | "kot">("item");
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const prevCountRef = useRef(0);
   const queryClient = useQueryClient();
   const { config } = useConfig();
   const { slaWarningMin, slaCriticalMin, refreshIntervalSec } = config.kds;
@@ -80,6 +83,14 @@ function KdsPage() {
       .sort((a, b) => a.order.createdAt - b.order.createdAt);
   }, [orders, station]);
 
+  useEffect(() => {
+    const totalItems = tickets.reduce((sum, t) => sum + t.items.length, 0);
+    if (totalItems > prevCountRef.current && soundEnabled && prevCountRef.current > 0) {
+      playKitchenChime();
+    }
+    prevCountRef.current = totalItems;
+  }, [tickets, soundEnabled]);
+
   return (
     <div className="p-6 space-y-4">
       <header className="flex flex-wrap items-end justify-between gap-3">
@@ -88,6 +99,19 @@ function KdsPage() {
           <p className="text-xs text-muted-foreground">Tickets advance as items are prepared and served.</p>
         </div>
         <div className="flex items-center gap-4">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              const next = !soundEnabled;
+              setSoundEnabled(next);
+              if (next) playKitchenChime();
+            }}
+            className="text-xs gap-1.5 h-8"
+          >
+            {soundEnabled ? <Volume2 className="h-3.5 w-3.5 text-emerald-600" /> : <VolumeX className="h-3.5 w-3.5 text-muted-foreground" />}
+            {soundEnabled ? "Chime On" : "Muted"}
+          </Button>
           <div className="flex gap-1 bg-muted p-1 rounded-lg">
             <button
               onClick={() => setViewMode("item")}

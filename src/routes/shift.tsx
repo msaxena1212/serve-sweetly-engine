@@ -241,6 +241,21 @@ function ShiftPage() {
                 <LogOut className="h-4 w-4 mr-2" />
                 Close Shift
               </Button>
+
+              <div className="pt-2 border-t space-y-2">
+                <Button variant="outline" size="sm" className="w-full gap-1.5 text-xs" onClick={generateBriefing} disabled={generatingBriefing}>
+                  <Sparkles className="h-3.5 w-3.5 text-primary" />
+                  Generate AI Shift Briefing
+                </Button>
+                {briefing && (
+                  <div className="p-3 bg-muted/50 rounded-md border text-xs space-y-2">
+                    <pre className="whitespace-pre-wrap font-mono text-[11px] leading-relaxed">{briefing}</pre>
+                    <Button variant="secondary" size="sm" className="w-full h-7 text-xs gap-1.5" onClick={copyBriefing}>
+                      <Copy className="h-3 w-3" /> Copy for WhatsApp / Telegram
+                    </Button>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </CardContent>

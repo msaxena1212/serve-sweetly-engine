@@ -3,15 +3,22 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Minus, Plus, Trash2, Send, CreditCard, Ban, Sparkles, Crown, Heart, User, Check } from "lucide-react";
+import { Minus, Plus, Trash2, Send, CreditCard, Ban, Sparkles, Crown, Heart, User, Check, Calculator, Receipt, SlidersHorizontal } from "lucide-react";
 import { getCustomerProfileFn } from "@/lib/api";
 import { useMemo, useState, useEffect } from "react";
 import { toast } from "sonner";
 import { PaymentModal } from "@/components/payment-modal";
+import { BillSplitterModal } from "@/fe/components/bill-splitter-modal";
+import { ItemModifiersDialog } from "@/fe/components/item-modifiers-dialog";
+import { DigitalReceiptModal } from "@/fe/components/digital-receipt-modal";
+import { generateAsciiReceipt, generateHtmlReceipt } from "@/be/services/receipt.service";
 
 export function OrderPanel({ order }: { order: Order }) {
   const { dispatch, getOrderTotals, tables, menu } = usePos();
   const [showPayment, setShowPayment] = useState(false);
+  const [showSplitter, setShowSplitter] = useState(false);
+  const [showReceipt, setShowReceipt] = useState(false);
+  const [modifierTarget, setModifierTarget] = useState<{ id: string; name: string } | null>(null);
   const totals = getOrderTotals(order);
   const hasUnsent = order.items.some((i) => i.status === "new");
 
@@ -97,9 +104,64 @@ export function OrderPanel({ order }: { order: Order }) {
     return suggestions.slice(0, 3);
   }, [order.items, menu, hasBeverage, hasDessert, hasMains, currentItemIds]);
 
+  const receiptPayload = useMemo(() => {
+    const data = {
+      restaurantName: "Forno Restaurant & Cafe",
+      branchName: "Main Branch",
+      orderId: parseInt(order.id) || 0,
+      invoiceNumber: `INV-${order.id.slice(-5).toUpperCase()}`,
+      tableNumber: tableName,
+      orderType: order.type as "dine-in" | "takeaway",
+      customerName: order.customerName,
+      createdAt: order.createdAt || new Date(),
+      items: order.items.map((i) => ({
+        name: i.name,
+        quantity: i.qty,
+        unitPrice: i.price,
+        totalPrice: i.price * i.qty,
+        notes: i.notes,
+      })),
+      subtotal: totals.subtotal,
+      discountPct: order.discountPct || 0,
+      discountAmount: totals.discount,
+      taxPct: order.taxPct || 0,
+      taxAmount: totals.tax,
+      total: totals.total,
+    };
+    return {
+      text: generateAsciiReceipt(data),
+      html: generateHtmlReceipt(data),
+    };
+  }, [order, tableName, totals]);
+
   return (
     <>
       {showPayment && <PaymentModal order={order} onClose={() => setShowPayment(false)} />}
+      <BillSplitterModal
+        open={showSplitter}
+        onOpenChange={setShowSplitter}
+        orderId={parseInt(order.id) || 0}
+        totalAmount={totals.paid > 0 ? totals.balance : totals.total}
+      />
+      <DigitalReceiptModal
+        open={showReceipt}
+        onOpenChange={setShowReceipt}
+        receiptText={receiptPayload.text}
+        receiptHtml={receiptPayload.html}
+        orderId={order.id}
+      />
+      {modifierTarget && (
+        <ItemModifiersDialog
+          open={!!modifierTarget}
+          onOpenChange={(open) => !open && setModifierTarget(null)}
+          itemName={modifierTarget.name}
+          onApply={(mods, customNote) => {
+            const combined = [...mods, customNote].filter(Boolean).join(", ");
+            dispatch({ type: "UPDATE_NOTES", orderId: order.id, itemId: modifierTarget.id, notes: combined });
+            toast.success(`Updated modifiers for ${modifierTarget.name}`);
+          }}
+        />
+      )}
       <Card className="p-4 flex flex-col h-full">
         <div className="flex items-start justify-between mb-2">
           <div>
@@ -185,15 +247,11 @@ export function OrderPanel({ order }: { order: Order }) {
                   <span>{i.station} · {i.status}</span>
                   {i.status === "new" ? (
                     <button 
-                      onClick={() => {
-                        const notes = prompt("Add remarks for " + i.name, i.notes || "");
-                        if (notes !== null) {
-                          dispatch({ type: "UPDATE_NOTES", orderId: order.id, itemId: i.id, notes });
-                        }
-                      }}
-                      className="text-primary hover:underline"
+                      onClick={() => setModifierTarget({ id: i.id, name: i.name })}
+                      className="text-primary hover:underline inline-flex items-center gap-1"
                     >
-                      {i.notes ? `Remarks: ${i.notes}` : "+ Remarks"}
+                      <SlidersHorizontal className="h-2.5 w-2.5" />
+                      {i.notes ? `Modifiers: ${i.notes}` : "+ Modifiers"}
                     </button>
                   ) : (
                     i.notes && <span className="italic text-primary">Remarks: {i.notes}</span>
@@ -252,7 +310,28 @@ export function OrderPanel({ order }: { order: Order }) {
           </div>
         </div>
 
-        <div className="mt-3 grid grid-cols-2 gap-2">
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 text-xs border"
+            disabled={order.items.length === 0}
+            onClick={() => setShowSplitter(true)}
+          >
+            <Calculator className="h-3.5 w-3.5 mr-1.5" /> Split Bill
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 text-xs border"
+            disabled={order.items.length === 0}
+            onClick={() => setShowReceipt(true)}
+          >
+            <Receipt className="h-3.5 w-3.5 mr-1.5" /> Digital Slip
+          </Button>
+        </div>
+
+        <div className="mt-2 grid grid-cols-2 gap-2">
           <Button variant="outline" disabled={!hasUnsent} onClick={async () => { 
             dispatch({ type: "SEND_KOT", orderId: order.id }); 
             

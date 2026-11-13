@@ -217,7 +217,7 @@ Reply with a JSON object: {"reply": string, "intent": "answer"|"book_table"|"wai
 - Booking a table for a later time: intent "book_table", params {"name","phone","pax","time" (HH:MM, 24h),"table" (optional table number)}.
 - Adding a guest to the walk-in waitlist (e.g. "I want a table now", "add to waitlist", "put on waitlist"): intent "waitlist", params {"name","phone","pax"}.
 - Taking payment for a table's open bill: intent "checkout", params {"table","method" (one of the payment methods below)}.
-- Ordering or adding dishes to a table (e.g. "Add 2 Margheritas and 1 Coke to Table 4", "Table T2 wants 1 Garlic Naan", "Order 2 Tiramisu for T5"): intent "order_items", params {"table": string, "items": [{"name": string, "qty": number, "notes"?: string}]}. Match dish names to the menu.
+- Ordering or adding dishes to a table (e.g. "Add 2 Margheritas and 1 Coke to Table 4", "Table T2 wants 1 Iced Latte with oat milk and half sweet", "Order 2 Tiramisu for T5"): intent "order_items", params {"table": string, "items": [{"name": string, "qty": number, "notes"?: string}]}. Match dish names to the menu, and ALWAYS extract modifiers, beverage customizations, allergies, or spice levels (e.g. "oat milk", "almond milk", "extra spicy", "less ice", "no onion", "half sweet", "extra cheese") into the item's "notes" field.
 Support English, Hindi, and Hinglish phrasing seamlessly. Waitstaff often say:
 - "Table 2 pe 2 butter naan aur ek dal daal do" -> intent "order_items" for table 2
 - "Table 3 ka bill cash se settle karo" -> intent "checkout" for table 3 with cash

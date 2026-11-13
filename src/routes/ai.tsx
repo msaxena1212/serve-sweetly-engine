@@ -2,9 +2,10 @@ import { createFileRoute, redirect, useRouter } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Sparkles, RefreshCw, ShoppingCart, ArrowRight, Download } from "lucide-react";
+import { Sparkles, RefreshCw, ShoppingCart, ArrowRight, Download, Bot, Copy, Send } from "lucide-react";
 import { getAiInsightsFn, getAiAnalysisFn } from "@/lib/ai";
 import { createPoFromAiRecommendationsFn } from "@/lib/api";
+import { apiClient } from "@/fe/api-client";
 import { toast } from "sonner";
 import type { Insights } from "@/lib/ai-analytics";
 import { usePager, Pager } from "@/components/pager";
@@ -42,6 +43,7 @@ const TABS = [
   { id: "trends", label: "Sales trends" },
   { id: "profit", label: "Profitability" },
   { id: "summary", label: "Daily summary" },
+  { id: "agents", label: "AI Agents & Bots" },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
 
@@ -66,6 +68,9 @@ function AiInsightsPage() {
   const [analysis, setAnalysis] = useState<{ text: string; model: string; generatedAt: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [creatingPo, setCreatingPo] = useState(false);
+  const [agentReorder, setAgentReorder] = useState<any | null>(null);
+  const [agentBriefing, setAgentBriefing] = useState<any | null>(null);
+  const [agentBusy, setAgentBusy] = useState<string | null>(null);
   const [tab, setTab] = useState<TabId>(() => {
     const valid = TABS.find((t) => t.id === search.tab);
     return valid ? valid.id : "overview";
@@ -134,6 +139,32 @@ function AiInsightsPage() {
       toast.error(e.message || "Failed to create Purchase Order");
     } finally {
       setCreatingPo(false);
+    }
+  };
+
+  const runReorderAgent = async () => {
+    setAgentBusy("reorder");
+    try {
+      const res = await apiClient.ai.reorder();
+      setAgentReorder(res);
+      toast.success(`Autonomous Reorder scanned ${res.itemsReorderedCount} low-stock items.`);
+    } catch (e: any) {
+      toast.error(e.message || "Autonomous Reorder Agent failed");
+    } finally {
+      setAgentBusy(null);
+    }
+  };
+
+  const runOwnerBriefingBot = async () => {
+    setAgentBusy("briefing");
+    try {
+      const res = await apiClient.ai.briefing();
+      setAgentBriefing(res);
+      toast.success("Executive Owner Briefing compiled.");
+    } catch (e: any) {
+      toast.error(e.message || "Executive Briefing Bot failed");
+    } finally {
+      setAgentBusy(null);
     }
   };
 
@@ -611,6 +642,100 @@ function AiInsightsPage() {
                 <p className="text-sm text-muted-foreground">Press the button to write the summary.</p>
               )}
             </Card>
+          )}
+
+          {tab === "agents" && (
+            <div className="grid gap-4 lg:grid-cols-2">
+              {/* 1. Autonomous Reorder Agent */}
+              <Card className="p-5 space-y-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <h2 className="font-semibold flex items-center gap-2">
+                      <Bot className="h-4 w-4 text-primary" /> Autonomous Reorder Agent
+                    </h2>
+                    <p className="text-xs text-muted-foreground">
+                      Scans stock levels against safety buffers, generates supplier POs, and drafts WhatsApp dispatch messages.
+                    </p>
+                  </div>
+                  <Button size="sm" onClick={runReorderAgent} disabled={agentBusy === "reorder"}>
+                    {agentBusy === "reorder" ? "Scanning…" : "Run Agent"}
+                  </Button>
+                </div>
+
+                {agentReorder ? (
+                  agentReorder.itemsReorderedCount === 0 ? (
+                    <div className="p-3 rounded bg-emerald-50 text-emerald-800 text-xs">
+                      All ingredients are above safety stock levels. No vendor dispatches needed.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="text-xs font-medium">
+                        Found {agentReorder.itemsReorderedCount} items below threshold (Est: {money(agentReorder.totalEstimatedCost)})
+                      </div>
+                      {agentReorder.supplierOrders.map((po: any, idx: number) => (
+                        <div key={idx} className="p-3 rounded border bg-muted/40 space-y-2 text-xs">
+                          <div className="font-semibold">{po.supplierName}</div>
+                          <pre className="whitespace-pre-wrap font-mono text-[11px] bg-background p-2.5 rounded border max-h-48 overflow-y-auto">
+                            {po.whatsappMessage}
+                          </pre>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="w-full h-7 text-xs gap-1.5"
+                            onClick={() => {
+                              navigator.clipboard.writeText(po.whatsappMessage);
+                              toast.success("Vendor PO message copied for WhatsApp!");
+                            }}
+                          >
+                            <Copy className="h-3 w-3" /> Copy WhatsApp Vendor Order
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                ) : (
+                  <p className="text-xs text-muted-foreground italic">Click Run Agent to scan inventory and draft vendor messages.</p>
+                )}
+              </Card>
+
+              {/* 2. Executive Owner Daily Briefing Bot */}
+              <Card className="p-5 space-y-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <h2 className="font-semibold flex items-center gap-2">
+                      <Send className="h-4 w-4 text-primary" /> Executive Owner Briefing Bot
+                    </h2>
+                    <p className="text-xs text-muted-foreground">
+                      Compiles live revenue, gross profit, top sellers, low stock, and cash variance into a WhatsApp/Telegram briefing.
+                    </p>
+                  </div>
+                  <Button size="sm" onClick={runOwnerBriefingBot} disabled={agentBusy === "briefing"}>
+                    {agentBusy === "briefing" ? "Compiling…" : "Generate Briefing"}
+                  </Button>
+                </div>
+
+                {agentBriefing ? (
+                  <div className="space-y-2">
+                    <pre className="whitespace-pre-wrap font-mono text-[11px] bg-muted/40 p-3 rounded border max-h-64 overflow-y-auto">
+                      {agentBriefing.formattedBriefingText}
+                    </pre>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="w-full h-8 text-xs gap-1.5"
+                      onClick={() => {
+                        navigator.clipboard.writeText(agentBriefing.formattedBriefingText);
+                        toast.success("Executive briefing copied to clipboard!");
+                      }}
+                    >
+                      <Copy className="h-3.5 w-3.5" /> Copy Briefing for WhatsApp / Telegram
+                    </Button>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground italic">Click Generate Briefing to compile today's owner report.</p>
+                )}
+              </Card>
+            </div>
           )}
         </>
       )}
